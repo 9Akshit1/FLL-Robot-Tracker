@@ -1,5 +1,6 @@
 # RUN FROM THE SPIKE LEGOEDUCATION WEBSITE
 
+import csv
 import motor
 import time
 import runloop
