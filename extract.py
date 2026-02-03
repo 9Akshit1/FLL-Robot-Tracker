@@ -88,6 +88,21 @@ async def collect_data():
                 data_points = []
             await runloop.sleep_ms(100)
 
+def save_to_csv(data, filename="output.csv"):
+    """Saves collected data points to a csv file."""
+    # Define headers based on your data structure
+    headers = ["Time(ms)", "motor_a_relative", "motor_a_absolute", "Motor_b_relative","motor_b_abs", "yaw_deg", "pitch_deg", "roll_deg"]
+
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+
+        # The header row
+        writer.writerow(headers)
+
+        # Write all data rows at once
+        writer.writerows(data)
+    print(f"Successfully saved {len(data)} rows to {filename}")
+
 # Show ready message
 light_matrix.write("Ready!")
 print("=== FLL Robot Data Logger ===")
@@ -101,3 +116,6 @@ print("")
 
 # Run both coroutines
 runloop.run(check_buttons(), collect_data())
+
+# Save data to CSV when program ends
+save_to_csv(data_points)
