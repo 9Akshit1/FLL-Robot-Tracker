@@ -1,0 +1,8 @@
+import pandas as pd
+
+df = pd.read_csv("data.csv")
+
+# Keep column 0, 2, 4, 6, ...
+df_clean = df.iloc[:, ::2]
+
+print(df_clean)
