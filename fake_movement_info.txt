@@ -1,0 +1,12 @@
+Motion timeline (what this fake data represents)
+
+Sampling: every 50 ms
+Total duration: ~15 seconds (~300 rows)
+
+Time(s) = Motion
+0–2	= stationary (encoder jitter only)
+2–6	= drive straight
+6–9	= smooth left turn
+9–11 = arm/finger movement only
+11–14 = drive + small arm corrections
+14–15 = stop & settle
