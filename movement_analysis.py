@@ -115,7 +115,7 @@ def classify_movements(data):
             if current is not None:
                 if data[i].t - start_t >= MIN_SEGMENT_MS:
                     segments.append(
-                        MovementSegment(start_t, data[i].t, current, 0.85)
+                        MovementSegment(start_t, data[i].t, current, 0.85)    # confidence is fixed for now
                     )
             current = label
             start_t = data[i].t
@@ -129,5 +129,5 @@ def run_pipeline(csv_path):
     for s in segments:
         print(s)
 
-# MAIN
-run_pipeline("fake.csv")
+# Run the pipeline
+run_pipeline("cleaned_data.csv")

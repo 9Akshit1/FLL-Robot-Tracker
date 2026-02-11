@@ -20,14 +20,14 @@ async def check_buttons():
                 "time_ms,"
                 "motorA_rel_deg,motorA_abs_deg,"
                 "motorB_rel_deg,motorB_abs_deg,"
-                "motorC_rel_deg,motorC_abs_deg,"
+                #"motorC_rel_deg,motorC_abs_deg,"
                 "yaw_deg,pitch_deg,roll_deg\r\n",
                 end=""
             )
 
             motor.reset_relative_position(port.A, 0)
             motor.reset_relative_position(port.B, 0)
-            motor.reset_relative_position(port.C, 0)
+            #motor.reset_relative_position(port.C, 0)
 
             while button.pressed(button.LEFT) > 0:
                 await runloop.sleep_ms(10)
@@ -54,12 +54,12 @@ async def collect_data():
 
             a_rel = motor.relative_position(port.A)
             b_rel = motor.relative_position(port.B)
-            c_rel = motor.relative_position(port.C)
+            #c_rel = motor.relative_position(port.C)
             #c_rel = 0
 
             a_abs = motor.absolute_position(port.A)
             b_abs = motor.absolute_position(port.B)
-            c_abs = motor.absolute_position(port.C)
+            #c_abs = motor.absolute_position(port.C)
             #c_abs = 0
 
             yaw, pitch, roll = motion_sensor.tilt_angles()
@@ -72,7 +72,7 @@ async def collect_data():
                 str(t) + "," +
                 str(a_rel) + "," + str(a_abs) + "," +
                 str(b_rel) + "," + str(b_abs) + "," +
-                str(c_rel) + "," + str(c_abs) + "," +
+                #str(c_rel) + "," + str(c_abs) + "," +
                 str(yaw) + "," + str(pitch) + "," + str(roll)
             )
 
