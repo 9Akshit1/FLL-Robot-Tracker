@@ -1,4 +1,4 @@
-# NOTE: RUN FROM THE SPIKE LEGO EDUCATION WEBSITE (or VS Code → run on hub)
+# NOTE: RUN FROM THE SPIKE LEGO EDUCATION WEBSITE (or VS Code and run on hub)
 
 import motor
 import time
