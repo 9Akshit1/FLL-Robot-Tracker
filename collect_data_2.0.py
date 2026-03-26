@@ -2,6 +2,7 @@
 
 import motor
 import force_sensor
+import distance_sensor
 import time
 import runloop
 from hub import port, motion_sensor, button, light_matrix
@@ -22,6 +23,7 @@ async def check_buttons():
                 "motorA_rel_deg,motorA_abs_deg,"
                 "motorB_rel_deg,motorB_abs_deg,"
                 "force_N,"
+                "distance_mm,"
                 "yaw_deg,pitch_deg,roll_deg\r\n",
                 end=""
             )
@@ -55,13 +57,9 @@ async def collect_data():
 
             a_rel = motor.relative_position(port.A)
             b_rel = motor.relative_position(port.B)
-            #c_rel = motor.relative_position(port.C)
-            #c_rel = 0
 
             a_abs = motor.absolute_position(port.A)
             b_abs = motor.absolute_position(port.B)
-            #c_abs = motor.absolute_position(port.C)
-            #c_abs = 0
 
             yaw, pitch, roll = motion_sensor.tilt_angles()
             yaw /= 10
@@ -71,12 +69,16 @@ async def collect_data():
             # Return Force in Newtons - Force Sensor should go in port c.
             force = force_sensor.force(port.C)
 
+            # Return Distance in cm - Distance Sensor should go in port D.
+            dist = distance_sensor.distance(port.D)
+
             # Copy pasteable csv format. FLL python doesnt allow to use proper import csv library stuff
             print(
                 str(t) + "," +
                 str(a_rel) + "," + str(a_abs) + "," +
                 str(b_rel) + "," + str(b_abs) + "," +
                 str(force) + "," +
+                str(dist) + "," +
                 str(yaw) + "," + str(pitch) + "," + str(roll)
             )
 
