@@ -1,20 +1,19 @@
-# produce_data.py
-# LEGO SPIKE Hub Data Logger
-# Stores data directly to a CSV file on the hub
-# Compatible with Python SPIKE / PyBricks
-
 import motor
 import time
 import runloop
 from hub import port, motion_sensor, light_matrix
 
+# These MUST be at module level before the async functions
 recording = False
 header_sent = False
-CSV_PATH = "data_log.csv"  # file created on the hub
+start_flag = False
+stop_flag = False
+
+CSV_PATH = "/flash/data_log.csv"
 
 # ---------------- HELPER ----------------
 def send_header(f):
-    f.write(
+    f.write(    
         "time_ms,"
         "motorA_rel_deg,motorA_abs_deg,"
         "motorB_rel_deg,motorB_abs_deg,"
@@ -26,11 +25,11 @@ def send_header(f):
 # ---------------- LISTEN FOR COMMANDS ----------------
 async def listen_for_commands():
     """
-    Waits for commands via stdin:
-    'START' -> start recording
-    'STOP' -> stop recording
+    Polls global variables for commands:
+    start_flag = True -> start recording
+    stop_flag = True -> stop recording
     """
-    global recording, header_sent
+    global recording, header_sent, start_flag, stop_flag
     f = None
 
     try:
@@ -41,26 +40,23 @@ async def listen_for_commands():
         return
 
     while True:
-        try:
-            cmd = input().strip()
-        except Exception:
-            cmd = ""
-
-        if cmd.upper() == "START":
+        if start_flag:
             recording = True
             header_sent = False
             light_matrix.write("REC")
             print("#Recording started")
+            start_flag = False
 
-        elif cmd.upper() == "STOP":
+        if stop_flag:
             recording = False
             light_matrix.write("STOP")
             print("#Recording stopped")
             if f:
                 f.close()
+            print("#Exiting")
             break
 
-        await runloop.sleep_ms(50)
+        await runloop.sleep_ms(100)
 
 # ---------------- COLLECT DATA ----------------
 async def collect_data():
@@ -88,6 +84,7 @@ async def collect_data():
                 motor.reset_relative_position(port.C, 0)
                 start_time = time.ticks_ms()
                 header_sent = True
+                print("#Header written, recording data...")
 
             t = time.ticks_ms() - start_time
 
@@ -118,4 +115,6 @@ async def collect_data():
 # ---------------- MAIN ----------------
 light_matrix.write("READY")
 print("#FLL Robot Data Logger READY")
+print("#Waiting for start_flag = True")
+
 runloop.run(listen_for_commands(), collect_data())
