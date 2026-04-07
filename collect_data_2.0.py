@@ -66,8 +66,8 @@ async def collect_data():
             pitch /= 10
             roll /= 10
 
-            # Return Force in Newtons - Force Sensor should go in port c.
-            force = force_sensor.force(port.C)
+            # Return Force in Newtons - Force Sensor should go in port F.
+            force = force_sensor.force(port.F)
 
             # Return Distance in cm - Distance Sensor should go in port D.
             dist = distance_sensor.distance(port.D)
