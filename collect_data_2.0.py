@@ -1,5 +1,15 @@
 # NOTE: RUN FROM THE SPIKE LEGO EDUCATION WEBSITE (or VS Code and run on hub)
 
+"""
+Letters:
+A: Motor
+B: Motor
+C: Bottom Motor (Gyro)
+D: Distance Sensor
+E: Force Sensor
+F: Force Sensor
+"""
+
 import motor
 import force_sensor
 import distance_sensor
