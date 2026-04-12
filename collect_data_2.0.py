@@ -1,7 +1,7 @@
-# NOTE: RUN FROM THE SPIKE LEGO EDUCATION WEBSITE (or VS Code and run on hub)
+# Run on Lego Spike
 
 """
-Letters:
+Legend:
 A: Motor
 B: Motor
 C: Bottom Motor (Gyro)
@@ -27,7 +27,7 @@ async def check_buttons():
             recording = True
             light_matrix.show_image(light_matrix.IMAGE_YES)
 
-            # CSV header (NO SPACES)
+            # csv header
             print(
                 "time_ms,"
                 "motorA_rel_deg,motorA_abs_deg,"
@@ -76,13 +76,13 @@ async def collect_data():
             pitch /= 10
             roll /= 10
 
-            # Return Force in Newtons - Force Sensor should go in port F.
+            # force sensor
             force = force_sensor.force(port.F)
 
-            # Return Distance in cm - Distance Sensor should go in port D.
+            # distance sensor
             dist = distance_sensor.distance(port.D)
 
-            # Copy pasteable csv format. FLL python doesnt allow to use proper import csv library stuff
+            # copy pastable csv
             print(
                 str(t) + "," +
                 str(a_rel) + "," + str(a_abs) + "," +
