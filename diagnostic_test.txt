@@ -1,0 +1,146 @@
+NOTE:!!!!!!! Run each command in order. Paste the output after each one.
+------------------------------------------------------
+STEP 1: TEST BASIC CONNECTION
+mpremote connect COM7 exec "print('Connection OK')" 2>&1
+OUTPUT:
+Connection OK
+
+-----------------------------------------------
+STEP 2: TEST LIGHT MATRIX (verify you can see screen changes)
+mpremote connect COM7 exec "from hub import light_matrix; light_matrix.write('TST')" 2>&1
+OUTPUT:
+Displayed the TST on the light matrix.
+
+-----------------------------------------------
+STEP 3: TEST MOTION SENSOR
+mpremote connect COM7 exec "from hub import motion_sensor; print(motion_sensor.tilt_angles())" 2>&1
+OUTPUT:
+(0, 0, 6)
+
+-----------------------------------------------------
+STEP 4: TEST MOTOR (Motor A relative position)
+mpremote connect COM7 exec "import motor; from hub import port; import time; time.sleep_ms(500); print(motor.relative_position(port.A))" 2>&1
+OUTPUT:
+24
+
+------------------------------------------------------
+STEP 5: LIST FILES ON HUB (before we do anything)
+mpremote connect COM7 fs ls /flash/ 2>&1
+OUTPUT:
+ls :/flash/
+         528 README.txt
+         196 boot.py
+           0 config/
+          14 control.txt
+       17177 data_log.csv
+          33 hub_config.txt
+        5121 main.py
+           0 program/
+        2597 pybcdc.inf
+
+-----------------------------------------------------
+STEP 6: DELETE OLD data_log.csv
+mpremote connect COM7 exec "import os; os.remove('/flash/data_log.csv')" 2>&1; mpremote connect COM7 fs ls /flash/ 2>&1 
+OUTPUT:
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+OSError: [Errno 2] ENOENT
+
+----------------------------------------------------
+STEP 7: VERIFY CSV IS GONE
+mpremote connect COM7 fs ls /flash/ 2>&1
+OUTPUT:
+ls :/flash/
+         528 README.txt
+         196 boot.py
+           0 config/
+          14 control.txt
+          33 hub_config.txt
+        5121 main.py
+           0 program/
+        2597 pybcdc.inf
+
+-----------------------------------------------------
+STEP 8: UPLOAD produce_data.py as main.py
+mpremote connect COM7 cp backend/produce_data.py :main.py 2>&1
+OUTPUT:
+cp backend/produce_data.py :main.py
+
+------------------------------------------------
+STEP 9: RESET HUB (this runs main.py automatically)
+mpremote connect COM7 reset 2>&1
+[WAIT 6 SECONDS - HUB SHOULD SHOW "RDY" ON SCREEN]
+sleep 6
+OUTPUT:
+Didnt show Rdy on the screen.
+
+----------------------------------------------------------------
+STEP 10: VERIFY HUB IS READY (check screen shows RDY)
+mpremote connect COM7 exec "from hub import light_matrix; light_matrix.write('OK?'); print('Ready check sent')" 2>&1
+OUTPUT:
+Showed OK?
+Ready check sent
+
+----------------------------------------------------------
+STEP 11: SEND START COMMAND
+echo START > test_control.txt 2>&1
+mpremote connect COM7 cp test_control.txt :control.txt 2>&1
+[WAIT 1 SECOND - HUB SCREEN SHOULD SHOW "REC"]
+sleep 1
+OUTPUT:
+cp test_control.txt :control.txt
+
+--------------------------------------------------------
+STEP 12: MOVE THE ROBOT FOR 5 SECONDS
+[PHYSICALLY THE ROBOT NOW - move it for 5 seconds]
+[You should see motor position values changing]
+sleep 5
+OUTPUT:
+Didnt print anything
+
+-----------------------------------------------------------
+STEP 13: SEND STOP COMMAND
+echo STOP > test_control.txt 2>&1
+mpremote connect COM7 cp test_control.txt :control.txt 2>&1
+[WAIT 2 SECONDS - HUB SCREEN SHOULD SHOW "STP"]
+sleep 2
+OUTPUT:
+cp test_control.txt :control.txt
+
+-------------------------------------------------------------
+STEP 14: CHECK IF CSV EXISTS ON HUB
+mpremote connect COM7 fs ls /flash/ 2>&1
+
+---------------------------------------------------------------
+STEP 15: GET FILE SIZE
+mpremote connect COM7 exec "import os; size = os.stat('/flash/data_log.csv')[6]; print(f'File size: {size} bytes')" 2>&1
+OUTPUT:
+File size: 130 bytes
+
+---------------------------------------------------------------
+STEP 16: READ FIRST 10 LINES OF CSV FROM HUB
+mpremote connect COM7 exec "with open('/flash/data_log.csv', 'r') as f: lines = f.readlines()[:10]; print(len(lines), 'lines'); print(''.join(lines))" 2>&1
+OUTPUT:
+2 lines
+TEST
+time_ms,motorA_rel_deg,motorA_abs_deg,motorB_rel_deg,motorB_abs_deg,motorC_rel_deg,motorC_abs_deg,yaw_deg,pitch_deg,roll_deg
+
+-----------------------------------------------------------
+STEP 17: PULL CSV TO LOCAL MACHINE
+mpremote connect COM7 cp :data_log.csv test_output_fresh.csv 2>&1
+OUTPUT:
+cp :data_log.csv test_output_fresh.csv
+
+------------------------------------------------------------
+STEP 18: DISPLAY LOCAL CSV
+cat test_output_fresh.csv
+OTUPUT:
+TEST
+time_ms,motorA_rel_deg,motorA_abs_deg,motorB_rel_deg,motorB_abs_deg,motorC_rel_deg,motorC_abs_deg,yaw_deg,pitch_deg,roll_deg
+
+----------------------------------------------------------------------
+STEP 19: COUNT ROWS IN LOCAL CSV
+(cat test_output_fresh.csv | Measure-Object -Line).Lines
+
+OUTPUT:
+2

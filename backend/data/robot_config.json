@@ -1,0 +1,12 @@
+{
+  "motors": {
+    "A": "A",
+    "B": "B",
+    "C": "C"
+  },
+  "sensors": {
+    "distance": null,
+    "force": null,
+    "color": null
+  }
+}

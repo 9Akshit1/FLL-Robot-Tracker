@@ -1,95 +1,102 @@
+# ============================================================
+# movement_analysis.py - Dynamic Column Support
+# ============================================================
+
 import csv
 import os
-from typing import List
-
-# ---------------- DATA CLASS ----------------
+from typing import List, Dict
+from pathlib import Path
+import json
 
 class DataPoint:
-    def __init__(self, t=0, a_rel=0, a_abs=0, b_rel=0, b_abs=0, c_rel=0, c_abs=0, yaw=0, pitch=0, roll=0):
-        self.t = t
-        self.a_rel = a_rel
-        self.a_abs = a_abs
-        self.b_rel = b_rel
-        self.b_abs = b_abs
-        self.c_rel = c_rel
-        self.c_abs = c_abs
-        self.yaw = yaw
-        self.pitch = pitch
-        self.roll = roll
-
-
-# ---------------- LOAD ----------------
+    def __init__(self, data_dict):
+        self.t = float(data_dict.get("time_ms", 0))
+        
+        # Motor data - dynamically extract
+        self.motors = {}
+        for key, val in data_dict.items():
+            if "_rel_deg" in key or "_abs_deg" in key:
+                self.motors[key] = float(val)
+        
+        # Sensor data - dynamically extract
+        self.sensors = {}
+        for key, val in data_dict.items():
+            if "_mm" in key or "_N" in key:
+                self.sensors[key] = float(val)
+        
+        # IMU data
+        self.yaw = float(data_dict.get("yaw_deg", 0))
+        self.pitch = float(data_dict.get("pitch_deg", 0))
+        self.roll = float(data_dict.get("roll_deg", 0))
 
 def load_data(csv_path):
     data = []
-
-    with open(csv_path) as f:
+    with open(csv_path, encoding="utf-8", errors="ignore") as f:
         reader = csv.DictReader(f)
+        reader.fieldnames = [name.replace("\ufeff", "") for name in reader.fieldnames]
+        print("Clean headers:", reader.fieldnames)
+        
         for r in reader:
-            if r["time_ms"].startswith("#"):
+            if not r.get("time_ms") or str(r["time_ms"]).startswith("#"):
                 continue
-
-            data.append(
-                DataPoint(
-                    t=float(r["time_ms"]),
-                    a_rel=float(r["motorA_rel_deg"]),
-                    a_abs=float(r["motorA_abs_deg"]),
-                    b_rel=float(r["motorB_rel_deg"]),
-                    b_abs=float(r["motorB_abs_deg"]),
-                    c_rel=float(r.get("motorC_rel_deg", 0) or 0),
-                    c_abs=float(r.get("motorC_abs_deg", 0) or 0),
-                    yaw=float(r["yaw_deg"]),
-                    pitch=float(r["pitch_deg"]),
-                    roll=float(r["roll_deg"]),
-                )
-            )
+            
+            data.append(DataPoint(r))
     return data
 
-
-# ---------------- ANALYSIS ----------------
-
 def unwrap_angles(deg_list):
+    if not deg_list:
+        return []
     unwrapped = [deg_list[0]]
     offset = 0
-
     for i in range(1, len(deg_list)):
         delta = deg_list[i] - deg_list[i - 1]
-
         if delta > 180:
             offset -= 360
         elif delta < -180:
             offset += 360
-
         unwrapped.append(deg_list[i] + offset)
-
     return unwrapped
 
+def calculate_speed(motor_a_change, motor_b_change, dt_sec):
+    """Calculate forward speed"""
+    if dt_sec <= 0:
+        return 0
+    avg_speed = ((motor_a_change + motor_b_change) / 2) / dt_sec
+    return avg_speed
 
 def velocities(data):
+    if not data:
+        return [], []
+    
     drive_v = [0]
     yaw_v = [0]
-
+    
     yaw_unwrapped = unwrap_angles([d.yaw for d in data])
 
     for i in range(1, len(data)):
-        dt = (data[i].t - data[i - 1].t) / 1000
+        dt = (data[i].t - data[i - 1].t) / 1000.0
         if dt <= 0:
             drive_v.append(0)
             yaw_v.append(0)
             continue
 
-        drive = (
-            (data[i].a_rel - data[i - 1].a_rel) / dt +
-            (data[i].b_rel - data[i - 1].b_rel) / dt
-        ) / 2
-
+        # Find motor A and B changes (they're the drive motors)
+        motor_a_change = 0
+        motor_b_change = 0
+        
+        for key in data[i].motors:
+            if "motorA_rel_deg" in key:
+                motor_a_change = data[i].motors[key] - data[i-1].motors.get(key, 0)
+            elif "motorB_rel_deg" in key:
+                motor_b_change = data[i].motors[key] - data[i-1].motors.get(key, 0)
+        
+        drive = calculate_speed(motor_a_change, motor_b_change, dt)
         yaw_rate = (yaw_unwrapped[i] - yaw_unwrapped[i - 1]) / dt
 
         drive_v.append(drive)
         yaw_v.append(yaw_rate)
 
     return drive_v, yaw_v
-
 
 def classify_movements(data):
     segments = []
@@ -101,10 +108,11 @@ def classify_movements(data):
 
     current = None
     start_t = data[0].t
+    start_idx = 0
 
     for i in range(len(data)):
         label = "stationary"
-
+        
         if abs(drive_v[i]) > DRIVE_THRESHOLD:
             if abs(yaw_v[i]) > YAW_THRESHOLD:
                 label = "turning_left" if yaw_v[i] > 0 else "turning_right"
@@ -114,22 +122,31 @@ def classify_movements(data):
         if label != current:
             if current is not None:
                 if data[i].t - start_t >= MIN_SEGMENT_MS:
-                    segments.append([start_t, data[i].t, current])
+                    avg_speed = sum(drive_v[start_idx:i]) / max(1, i - start_idx)
+                    segments.append({
+                        'start': start_t,
+                        'end': data[i].t,
+                        'type': current,
+                        'avg_speed': round(avg_speed, 2),
+                        'duration': round((data[i].t - start_t) / 1000, 2)
+                    })
             current = label
             start_t = data[i].t
+            start_idx = i
 
     return segments
 
-
-# ---------------- PIPELINE ----------------
-
-def run(csv_path, output_segments_path=None):
+def run(csv_path, config=None):
     data = load_data(csv_path)
     segments = classify_movements(data)
-
-    if output_segments_path:
-        with open(output_segments_path, "w") as f:
-            for s in segments:
-                f.write(f"{s[0]},{s[1]},{s[2]}\n")
-
     return segments
+
+if __name__ == "__main__":
+    INPUT_FILE = Path("backend/data/raw_data.csv")
+    OUTPUT_FILE = Path("backend/data/segments.csv")
+
+    segments = run(str(INPUT_FILE))
+
+    print("\nDetected Segments:")
+    for s in segments:
+        print(f"[{s['start']:.0f} - {s['end']:.0f}] {s['type']:20} Speed: {s['avg_speed']:6.2f} deg/s Duration: {s['duration']:.2f}s")
