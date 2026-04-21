@@ -65,19 +65,20 @@ def generate_header(config):
     """Generate CSV header based on config"""
     fields = ["time_ms"]
     
-    # Motors
-    for motor_key in ["A", "B", "C"]:
-        if motor_key in config["motors"]:
-            fields.append(f"motor{motor_key}_rel_deg")
-            fields.append(f"motor{motor_key}_abs_deg")
+    # Motors - dynamically from config
+    for port, enabled in config.get("motors", {}).items():
+        if enabled:
+            fields.append(f"motor{port}_rel_deg")
+            fields.append(f"motor{port}_abs_deg")
     
-    # Sensors
-    if "distance" in config["sensors"] and config["sensors"]["distance"]:
-        fields.append(f"distance_{config['sensors']['distance']}_mm")
-    if "force" in config["sensors"] and config["sensors"]["force"]:
-        fields.append(f"force_{config['sensors']['force']}_N")
-    if "color" in config["sensors"] and config["sensors"]["color"]:
-        fields.append(f"color_{config['sensors']['color']}")
+    # Sensors - dynamically from config
+    sensors = config.get("sensors", {})
+    if sensors.get("distance"):
+        fields.append(f"distance_{sensors['distance']}_mm")
+    if sensors.get("force"):
+        fields.append(f"force_{sensors['force']}_N")
+    if sensors.get("color"):
+        fields.append(f"color_{sensors['color']}")
     
     # IMU
     fields.extend(["yaw_deg", "pitch_deg", "roll_deg"])
@@ -147,27 +148,28 @@ async def collect_data():
                 t = time.ticks_ms() - start_time
                 data_line = str(t)
 
-                # Collect motor data
-                for motor_key in ["A", "B", "C"]:
-                    if motor_key in config["motors"]:
-                        port_obj = PORT_MAP[motor_key]
+                # Collect motor data dynamically
+                for port, enabled in config.get("motors", {}).items():
+                    if enabled:
+                        port_obj = PORT_MAP[port]
                         rel = safe_read(lambda p=port_obj: motor.relative_position(p), 0)
                         abs_pos = safe_read(lambda p=port_obj: motor.absolute_position(p), 0)
                         data_line += f",{int(rel)},{int(abs_pos)}"
 
-                # Collect sensor data
-                if "distance" in config["sensors"] and config["sensors"]["distance"]:
-                    port_obj = PORT_MAP[config["sensors"]["distance"]]
+                # Collect sensor data dynamically
+                sensors = config.get("sensors", {})
+                if sensors.get("distance"):
+                    port_obj = PORT_MAP[sensors["distance"]]
                     dist = safe_read(lambda p=port_obj: distance_sensor.distance(p), 0)
                     data_line += f",{int(dist)}"
 
-                if "force" in config["sensors"] and config["sensors"]["force"]:
-                    port_obj = PORT_MAP[config["sensors"]["force"]]
+                if sensors.get("force"):
+                    port_obj = PORT_MAP[sensors["force"]]
                     force = safe_read(lambda p=port_obj: force_sensor.force(p), 0)
                     data_line += f",{int(force)}"
 
-                if "color" in config["sensors"] and config["sensors"]["color"]:
-                    port_obj = PORT_MAP[config["sensors"]["color"]]
+                if sensors.get("color"):
+                    port_obj = PORT_MAP[sensors["color"]]
                     color = safe_read(lambda p=port_obj: distance_sensor.distance(p), 0)
                     data_line += f",{int(color)}"
 

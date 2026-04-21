@@ -3,11 +3,13 @@
 const API_BASE = "http://127.0.0.1:5000";
 let terminalOutput = [];
 let currentConfig = null;
+let comPortSelected = null;
 
 const saveConfigBtn = document.getElementById("saveConfigBtn");
 const connectBtn = document.getElementById("connectBtn");
 const pullBtn = document.getElementById("pullBtn");
 const analyzeBtn = document.getElementById("analyzeBtn");
+const visualizeBtn = document.getElementById("visualizeBtn");
 const convertBtn = document.getElementById("convertBtn");
 const uploadBtn = document.getElementById("uploadBtn");
 const runBtn = document.getElementById("runBtn");
@@ -17,6 +19,21 @@ const statusBox = document.getElementById("status");
 const terminal = document.getElementById("terminal");
 const configStatus = document.getElementById("configStatus");
 const codePreview = document.getElementById("codePreview");
+const pathCanvas = document.getElementById("pathCanvas");
+const comPort = document.getElementById("comPort");
+const detectPortsBtn = document.getElementById("detectPortsBtn");
+const portStatus = document.getElementById("portStatus");
+const configGrid = document.getElementById("configGrid");
+
+// Available device types per port
+const PORT_LABELS = ["A", "B", "C", "D", "E", "F"];
+const DEVICE_TYPES = [
+    { id: "none", label: "None" },
+    { id: "motor", label: "Motor" },
+    { id: "distance_sensor", label: "Distance Sensor" },
+    { id: "force_sensor", label: "Force Sensor" },
+    { id: "color_sensor", label: "Color Sensor (Not Supported)" }
+];
 
 // ============================================================
 // TERMINAL
@@ -34,36 +51,131 @@ function clearTerminal() {
 }
 
 // ============================================================
+// COM PORT DETECTION
+// ============================================================
+
+async function detectPorts() {
+    detectPortsBtn.disabled = true;
+    portStatus.textContent = "[*] Scanning ports...";
+    
+    try {
+        const response = await fetch(`${API_BASE}/detect_ports`);
+        const data = await response.json();
+        
+        if (response.ok && data.ports.length > 0) {
+            // Clear existing options
+            comPort.innerHTML = "";
+            
+            // Add port options
+            data.ports.forEach(portInfo => {
+                const option = document.createElement("option");
+                option.value = portInfo.port;
+                option.textContent = `${portInfo.port} - ${portInfo.description || "Unknown Device"}`;
+                comPort.appendChild(option);
+            });
+            
+            portStatus.textContent = `✓ Found ${data.ports.length} port(s)`;
+            comPort.disabled = false;
+        } else {
+            portStatus.textContent = "✗ No ports found. Make sure robot is connected.";
+            comPort.innerHTML = '<option value="">No ports available</option>';
+        }
+    } catch (e) {
+        portStatus.textContent = `✗ ${e.message}`;
+    }
+    
+    detectPortsBtn.disabled = false;
+}
+
+comPort.addEventListener("change", () => {
+    comPortSelected = comPort.value;
+    if (comPortSelected) {
+        generateConfigUI();
+        portStatus.textContent = `✓ Port ${comPortSelected} selected`;
+    }
+});
+
+detectPortsBtn.addEventListener("click", detectPorts);
+
+// ============================================================
+// DYNAMIC CONFIG UI
+// ============================================================
+
+function generateConfigUI() {
+    configGrid.innerHTML = "";
+    
+    PORT_LABELS.forEach(port => {
+        const item = document.createElement("div");
+        item.className = "config-item";
+        item.innerHTML = `
+            <label>Port ${port}</label>
+            <select id="port${port}">
+                ${DEVICE_TYPES.map(type => 
+                    `<option value="${type.id}">${type.label}</option>`
+                ).join("")}
+            </select>
+        `;
+        configGrid.appendChild(item);
+    });
+    
+    // Add save button
+    const buttonRow = document.createElement("div");
+    buttonRow.className = "button-row";
+    buttonRow.style.marginTop = "15px";
+    buttonRow.innerHTML = `
+        <button id="saveConfigBtn" class="btn" style="flex: 0 1 auto; min-width: 150px;">Save & Upload Config</button>
+    `;
+    configGrid.parentElement.appendChild(buttonRow);
+    
+    // Re-attach save button handler
+    document.getElementById("saveConfigBtn").addEventListener("click", saveConfig);
+}
+
+// ============================================================
 // CONFIG MANAGEMENT
 // ============================================================
 
 function buildConfigObject() {
-    return {
-        motors: {
-            A: document.getElementById("motorA").value !== "none" ? document.getElementById("motorA").value : null,
-            B: document.getElementById("motorB").value !== "none" ? document.getElementById("motorB").value : null,
-            C: document.getElementById("motorC").value !== "none" ? document.getElementById("motorC").value : null,
-        },
-        sensors: {
-            distance: document.getElementById("sensorDist").value !== "none" ? document.getElementById("sensorDist").value : null,
-            force: document.getElementById("sensorForce").value !== "none" ? document.getElementById("sensorForce").value : null,
-            color: document.getElementById("sensorColor").value !== "none" ? document.getElementById("sensorColor").value : null,
-        }
+    const config = {
+        com_port: comPortSelected,
+        motors: {},
+        sensors: {}
     };
+    
+    PORT_LABELS.forEach(port => {
+        const select = document.getElementById(`port${port}`);
+        const value = select.value;
+        
+        if (value === "motor") {
+            config.motors[port] = true;
+        } else if (value === "distance_sensor") {
+            config.sensors.distance = port;
+        } else if (value === "force_sensor") {
+            config.sensors.force = port;
+        } else if (value === "color_sensor") {
+            config.sensors.color = port;
+        }
+    });
+    
+    return config;
 }
 
-saveConfigBtn.addEventListener("click", async () => {
-    const config = buildConfigObject();
-    
-    // Validate
-    const motorCount = Object.values(config.motors).filter(v => v !== null).length;
-    if (motorCount === 0) {
-        configStatus.textContent = "✗ Please select at least one motor";
+async function saveConfig() {
+    if (!comPortSelected) {
+        portStatus.textContent = "✗ Please select a COM port first";
         return;
     }
     
-    saveConfigBtn.disabled = true;
-    configStatus.textContent = "[*] Saving configuration...";
+    const config = buildConfigObject();
+    
+    // Validate
+    if (Object.keys(config.motors).length === 0) {
+        document.getElementById("configStatus").textContent = "✗ Please select at least one motor";
+        return;
+    }
+    
+    document.getElementById("saveConfigBtn").disabled = true;
+    document.getElementById("configStatus").textContent = "[*] Saving configuration...";
     
     try {
         const response = await fetch(`${API_BASE}/config`, {
@@ -76,19 +188,22 @@ saveConfigBtn.addEventListener("click", async () => {
         
         if (response.ok) {
             currentConfig = config;
-            configStatus.textContent = "✓ Configuration saved and uploaded to hub";
+            document.getElementById("configStatus").textContent = "✓ Configuration saved and uploaded to hub";
             statusBox.textContent = "Configuration ready. Click 'Connect & Record' to begin.";
             connectBtn.disabled = false;
             addTerminal("[✓] Config saved");
         } else {
-            configStatus.textContent = `✗ ${data.message}`;
-            saveConfigBtn.disabled = false;
+            document.getElementById("configStatus").textContent = `✗ ${data.message}`;
+            document.getElementById("saveConfigBtn").disabled = false;
         }
     } catch (e) {
-        configStatus.textContent = `✗ ${e.message}`;
-        saveConfigBtn.disabled = false;
+        document.getElementById("configStatus").textContent = `✗ ${e.message}`;
+        document.getElementById("saveConfigBtn").disabled = false;
     }
-});
+}
+
+// Initialize port detection
+detectPorts();
 
 // ============================================================
 // HANDLERS
@@ -148,7 +263,8 @@ analyzeBtn.addEventListener("click", async () => {
         if (response.ok) {
             addTerminal(data.output);
             convertBtn.disabled = false;
-            statusBox.textContent = "Analysis complete. Click 'Generate' to create replay script.";
+            visualizeBtn.disabled = false;
+            statusBox.textContent = "Analysis complete. Click 'Visualize' to see path or 'Generate' to create replay script.";
         } else {
             addTerminal(`[✗] ${data.message}`);
             analyzeBtn.disabled = false;
@@ -158,6 +274,91 @@ analyzeBtn.addEventListener("click", async () => {
         analyzeBtn.disabled = false;
     }
 });
+
+visualizeBtn.addEventListener("click", async () => {
+    visualizeBtn.disabled = true;
+    addTerminal("\n[*] Generating visualization...");
+    
+    try {
+        const response = await fetch(`${API_BASE}/visualize`);
+        const data = await response.json();
+        if (response.ok) {
+            addTerminal("[✓] Visualization ready");
+            drawPathVisualization(data.path_data);
+        } else {
+            addTerminal(`[✗] ${data.message}`);
+            visualizeBtn.disabled = false;
+        }
+    } catch (e) {
+        addTerminal(`[✗] ${e.message}`);
+        visualizeBtn.disabled = false;
+    }
+});
+
+// ============================================================
+// PATH VISUALIZATION
+// ============================================================
+
+function drawPathVisualization(pathData) {
+    const ctx = pathCanvas.getContext("2d");
+    const width = pathCanvas.width;
+    const height = pathCanvas.height;
+    
+    // Clear canvas
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, width, height);
+    
+    if (!pathData || pathData.length === 0) {
+        ctx.fillStyle = "#999";
+        ctx.font = "14px Arial";
+        ctx.fillText("No path data", width / 2 - 50, height / 2);
+        return;
+    }
+    
+    // Find bounds
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    pathData.forEach(point => {
+        minX = Math.min(minX, point.x);
+        maxX = Math.max(maxX, point.x);
+        minY = Math.min(minY, point.y);
+        maxY = Math.max(maxY, point.y);
+    });
+    
+    // Add padding
+    const padding = 40;
+    const rangeX = maxX - minX || 100;
+    const rangeY = maxY - minY || 100;
+    const scaleX = (width - 2 * padding) / rangeX;
+    const scaleY = (height - 2 * padding) / rangeY;
+    const scale = Math.min(scaleX, scaleY);
+    
+    // Transform coordinates
+    const toCanvasX = x => padding + (x - minX) * scale;
+    const toCanvasY = y => padding + (y - minY) * scale;
+    
+    // Draw path (light blue ribbon)
+    ctx.strokeStyle = "#87CEEB";
+    ctx.lineWidth = 12;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(toCanvasX(pathData[0].x), toCanvasY(pathData[0].y));
+    for (let i = 1; i < pathData.length; i++) {
+        ctx.lineTo(toCanvasX(pathData[i].x), toCanvasY(pathData[i].y));
+    }
+    ctx.stroke();
+    
+    // Draw robot (vivid deep yellow square)
+    const robotSize = 16;
+    const lastPoint = pathData[pathData.length - 1];
+    const robotX = toCanvasX(lastPoint.x) - robotSize / 2;
+    const robotY = toCanvasY(lastPoint.y) - robotSize / 2;
+    ctx.fillStyle = "#FFD700";
+    ctx.fillRect(robotX, robotY, robotSize, robotSize);
+    ctx.strokeStyle = "#FFA500";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(robotX, robotY, robotSize, robotSize);
+}
 
 convertBtn.addEventListener("click", async () => {
     convertBtn.disabled = true;

@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import json
 
-def load_rows(csv_path):
+def load_rows(csv_path, config=None):
     rows = []
 
     with open(csv_path, encoding="utf-8", errors="ignore") as f:
@@ -23,33 +23,47 @@ def load_rows(csv_path):
             # Dynamically extract motor data
             row = {'t': int(float(r['time_ms']))}
             
+            # Get motor ports from config
+            motor_ports = []
+            if config and "motors" in config:
+                motor_ports = [p for p, enabled in config["motors"].items() if enabled]
+            
             for key, val in r.items():
                 if "_rel_deg" in key:
                     # Extract motor letter (A, B, C, etc)
                     motor_letter = key.split('motor')[1][0]
-                    row[f'{motor_letter}_rel'] = int(float(val))
+                    if not motor_ports or motor_letter in motor_ports:
+                        row[f'{motor_letter}_rel'] = int(float(val))
 
             rows.append(row)
 
     print("Loaded rows:", len(rows))
     return rows
 
-def generate_spike_script(csv_path, out_path):
-    rows = load_rows(csv_path)
+def generate_spike_script(csv_path, out_path, config=None):
+    rows = load_rows(csv_path, config)
     if not rows:
         raise RuntimeError("No data loaded.")
 
     timeline = []
     prev = rows[0].copy()
+    
+    # Get motor ports from config
+    motor_ports = []
+    if config and "motors" in config:
+        motor_ports = [p for p, enabled in config["motors"].items() if enabled]
+    
+    if not motor_ports:
+        motor_ports = ["A", "B", "C"]  # fallback
 
     for r in rows[1:]:
         dt = r['t'] - prev['t']
         
-        # Build motion tuple dynamically
+        # Build motion tuple dynamically based on actual motors
         motion = [dt]
         
-        # Add motor deltas in order (A, B, C...)
-        for motor in ['A', 'B', 'C']:
+        # Add motor deltas in order
+        for motor in motor_ports:
             motor_key = f'{motor}_rel'
             if motor_key in r and motor_key in prev:
                 delta = r[motor_key] - prev[motor_key]
@@ -60,6 +74,17 @@ def generate_spike_script(csv_path, out_path):
         timeline.append(tuple(motion))
         prev = r.copy()
 
+    # Build the move_motors function dynamically
+    param_names = [f'd{p}' for p in motor_ports]
+    params = ', '.join(param_names)
+    
+    # Build the motor control code with proper indentation
+    motor_lines = []
+    for port in motor_ports:
+        motor_lines.append(f"    if d{port} != 0:")
+        motor_lines.append(f"        motor.run_for_degrees(port.{port}, d{port}, compute_speed(d{port}, dt))")
+    motor_control_code = '\n'.join(motor_lines)
+    
     content = f"""import runloop
 import motor
 from hub import port
@@ -72,13 +97,8 @@ def compute_speed(deg, dt):
     speed = int((abs(deg) / dt) * 1000)
     return max(100, min(speed, 1000))
 
-async def move_motors(dt, da, db, dc):
-    if da != 0:
-        motor.run_for_degrees(port.A, da, compute_speed(da, dt))
-    if db != 0:
-        motor.run_for_degrees(port.B, db, compute_speed(db, dt))
-    if dc != 0:
-        motor.run_for_degrees(port.C, dc, compute_speed(dc, dt))
+async def move_motors(dt, {params}):
+{motor_control_code}
     if dt > 0:
         await runloop.sleep_ms(dt)
 
@@ -99,5 +119,5 @@ if __name__ == "__main__":
     INPUT_CSV = Path("backend/data/raw_data.csv")
     OUTPUT_SCRIPT = Path("backend/data/replay.py")
 
-    path = generate_spike_script(str(INPUT_CSV), str(OUTPUT_SCRIPT))
+    path = generate_spike_script(str(INPUT_CSV), str(OUTPUT_SCRIPT), config=None)
     print(f"Replay script generated: {path}")

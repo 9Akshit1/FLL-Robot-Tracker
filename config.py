@@ -5,10 +5,10 @@
 from pathlib import Path
 
 # ============================================================
-# SERIAL PORT
+# SERIAL PORT (will be set from UI)
 # ============================================================
 
-SERIAL_PORT = "COM7"
+SERIAL_PORT = "COM7"  # Default, will be overridden
 
 # ============================================================
 # PATHS
@@ -25,19 +25,17 @@ PRODUCE_DATA_SCRIPT = Path("backend/produce_data.py")
 # ============================================================
 
 ROBOT_CONFIG = {
+    "com_port": "COM7",
     "motors": {
-        "A": {"port": "A", "name": "Left Drive", "type": "motor"},
-        "B": {"port": "B", "name": "Right Drive", "type": "motor"},
-        "C": {"port": "C", "name": "Attachment", "type": "motor"},
+        "A": True,
+        "B": True,
+        "C": True,
     },
     "sensors": {
-        "D": {"port": "D", "name": "Distance", "type": "distance_sensor"},
-        "F": {"port": "F", "name": "Force", "type": "force_sensor"},
-    },
-    "sample_interval_ms": 150,
-    "drive_threshold": 12,
-    "yaw_threshold": 12,
-    "min_segment_ms": 200,
+        "distance": None,
+        "force": None,
+        "color": None,
+    }
 }
 
 # ============================================================

@@ -27,13 +27,38 @@ current_config = ROBOT_CONFIG.copy()
 COLLECT_DATA_SCRIPT = Path("backend") / "collect_data_2_0.py"
 
 # ============================================================
+# PORT DETECTION
+# ============================================================
+
+def detect_serial_ports():
+    """Detect available serial ports"""
+    try:
+        import serial.tools.list_ports
+        ports = []
+        for port in serial.tools.list_ports.comports():
+            ports.append({
+                "port": port.device,
+                "description": port.description
+            })
+        return ports
+    except:
+        # Fallback: common ports
+        common_ports = []
+        if sys.platform == "win32":
+            common_ports = [f"COM{i}" for i in range(1, 10)]
+        else:
+            common_ports = [f"/dev/ttyUSB{i}" for i in range(5)]
+        return [{"port": p, "description": "Unknown"} for p in common_ports]
+
+# ============================================================
 # HELPER FUNCTIONS
 # ============================================================
 
 def run_mpremote(args, timeout=10):
     """Run mpremote command"""
     try:
-        cmd = ["mpremote", "connect", SERIAL_PORT] + args
+        com_port = current_config.get("com_port", SERIAL_PORT)
+        cmd = ["mpremote", "connect", com_port] + args
         print(f"DEBUG: Running mpremote: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         print(f"DEBUG: Return code: {result.returncode}, stderr: {result.stderr}")
@@ -125,6 +150,15 @@ def get_csv_headers():
 # ============================================================
 # CONFIG ROUTES
 # ============================================================
+
+@app.route("/detect_ports")
+def detect_ports():
+    """Detect available serial ports"""
+    try:
+        ports = detect_serial_ports()
+        return jsonify({"status": "Success", "ports": ports})
+    except Exception as e:
+        return jsonify({"status": "Error", "message": str(e), "ports": []}), 500
 
 @app.route("/config", methods=["GET", "POST"])
 def config_route():
@@ -234,27 +268,19 @@ def analyze():
         if not LOCAL_CSV_PATH.exists():
             return jsonify({"status": "Error", "message": "No CSV", "output": "✗ No CSV file"}), 400
         
-        result = subprocess.run(
-            [sys.executable, "backend/movement_analysis.py"],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent,
-            env={**dict(os.environ), "ROBOT_CONFIG": json.dumps(current_config)}
-        )
+        from backend.movement_analysis import run
+        output = run(str(LOCAL_CSV_PATH), config=current_config)
         
-        if result.returncode == 0:
-            output = result.stdout if result.stdout else "Analysis complete"
-            return jsonify({
-                "status": "Success",
-                "message": "Analysis complete",
-                "output": f"✓ Analysis complete\n\n{output}"
-            })
-        else:
-            return jsonify({
-                "status": "Error",
-                "message": result.stderr,
-                "output": f"✗ Error:\n{result.stderr}"
-            }), 500
+        # Format output
+        result_text = "✓ Analysis complete\n\nDetected Segments:\n"
+        for s in output:
+            result_text += f"[{s['start']:.0f} - {s['end']:.0f}] {s['type']:20} Speed: {s['avg_speed']:6.2f} deg/s Duration: {s['duration']:.2f}s\n"
+        
+        return jsonify({
+            "status": "Success",
+            "message": "Analysis complete",
+            "output": result_text
+        })
     except Exception as e:
         return jsonify({"status": "Error", "message": str(e), "output": f"✗ Error: {e}"}), 500
 
@@ -282,18 +308,13 @@ def convert():
                 "script_content": ""
             }), 400
         
-        result = subprocess.run(
-            [sys.executable, "backend/convert_to_code.py"],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent,
-            env={**dict(os.environ), "ROBOT_CONFIG": json.dumps(current_config)}
-        )
+        from backend.convert_to_code import generate_spike_script
         
-        replay_path = DATA_DIR / "replay.py"
+        output_path = DATA_DIR / "replay.py"
+        generate_spike_script(str(LOCAL_CSV_PATH), str(output_path), config=current_config)
         
-        if result.returncode == 0 and replay_path.exists():
-            shutil.copy(replay_path, GENERATED_SCRIPT_PATH)
+        if output_path.exists():
+            shutil.copy(output_path, GENERATED_SCRIPT_PATH)
             
             size = GENERATED_SCRIPT_PATH.stat().st_size
             script_content = read_generated_script()
@@ -305,11 +326,10 @@ def convert():
                 "script_content": script_content
             })
         else:
-            error_msg = result.stderr if result.stderr else "Script not created"
             return jsonify({
                 "status": "Error",
                 "message": "Failed to generate",
-                "output": f"✗ Error:\n{error_msg}",
+                "output": "✗ Script creation failed",
                 "script_content": ""
             }), 500
     except Exception as e:
@@ -388,6 +408,98 @@ def download():
         )
     except Exception as e:
         return jsonify({"status": "Error", "message": str(e)}), 500
+
+@app.route("/visualize")
+def visualize():
+    """Generate path visualization data"""
+    try:
+        from backend.movement_analysis import run
+        
+        if not LOCAL_CSV_PATH.exists():
+            return jsonify({
+                "status": "Error",
+                "message": "No CSV",
+                "path_data": []
+            }), 400
+        
+        segments = run(str(LOCAL_CSV_PATH), config=current_config)
+        
+        # Calculate robot path from segments
+        path_data = calculate_robot_path(segments)
+        
+        return jsonify({
+            "status": "Success",
+            "message": "Visualization ready",
+            "path_data": path_data
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "Error",
+            "message": str(e),
+            "path_data": []
+        }), 500
+
+def calculate_robot_path(segments):
+    """Calculate robot position over time from segments"""
+    try:
+        import csv
+        path = []
+        x, y, angle = 0, 0, 0
+        
+        # Get motor ports
+        motor_ports = [p for p, enabled in current_config.get("motors", {}).items() if enabled]
+        
+        if not motor_ports or len(motor_ports) < 2:
+            return path
+        
+        # Read CSV and integrate movement
+        with open(LOCAL_CSV_PATH, 'r') as f:
+            reader = csv.DictReader(f)
+            prev_time = 0
+            prev_motor_a = 0
+            prev_motor_b = 0
+            
+            for row in reader:
+                if not row.get("time_ms"):
+                    continue
+                
+                try:
+                    t = float(row.get("time_ms", 0))
+                    dt = (t - prev_time) / 1000.0
+                    
+                    # Get motor A and B positions (drive motors)
+                    motor_a_key = f"motor{motor_ports[0]}_rel_deg"
+                    motor_b_key = f"motor{motor_ports[1]}_rel_deg" if len(motor_ports) > 1 else motor_a_key
+                    
+                    motor_a = float(row.get(motor_a_key, 0))
+                    motor_b = float(row.get(motor_b_key, 0))
+                    
+                    delta_a = motor_a - prev_motor_a
+                    delta_b = motor_b - prev_motor_b
+                    
+                    # Simple differential drive model
+                    if dt > 0:
+                        avg_movement = (delta_a + delta_b) / 2.0
+                        delta_angle = (delta_b - delta_a) / 10.0
+                        
+                        angle += delta_angle
+                        angle_rad = angle * 3.14159 / 180.0
+                        
+                        x += avg_movement * 0.5 * (3.14159 / 180.0) * (5 / 1000.0) * 100  # rough conversion
+                        y += avg_movement * 0.5 * (3.14159 / 180.0) * (5 / 1000.0) * 100
+                    
+                    path.append({"x": x, "y": y, "angle": angle})
+                    
+                    prev_time = t
+                    prev_motor_a = motor_a
+                    prev_motor_b = motor_b
+                except:
+                    continue
+        
+        return path if path else []
+    except Exception as e:
+        print(f"Error calculating path: {e}")
+        return []
 
 # ============================================================
 # MAIN

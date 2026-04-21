@@ -64,7 +64,7 @@ def calculate_speed(motor_a_change, motor_b_change, dt_sec):
     avg_speed = ((motor_a_change + motor_b_change) / 2) / dt_sec
     return avg_speed
 
-def velocities(data):
+def velocities(data, config=None):
     if not data:
         return [], []
     
@@ -72,6 +72,14 @@ def velocities(data):
     yaw_v = [0]
     
     yaw_unwrapped = unwrap_angles([d.yaw for d in data])
+    
+    # Get motor ports from config
+    motor_ports = []
+    if config and "motors" in config:
+        motor_ports = [p for p, enabled in config["motors"].items() if enabled]
+    
+    if not motor_ports:
+        motor_ports = ["A", "B"]  # fallback
 
     for i in range(1, len(data)):
         dt = (data[i].t - data[i - 1].t) / 1000.0
@@ -80,17 +88,21 @@ def velocities(data):
             yaw_v.append(0)
             continue
 
-        # Find motor A and B changes (they're the drive motors)
-        motor_a_change = 0
-        motor_b_change = 0
+        # Find motor changes dynamically
+        motor_changes = []
         
-        for key in data[i].motors:
-            if "motorA_rel_deg" in key:
-                motor_a_change = data[i].motors[key] - data[i-1].motors.get(key, 0)
-            elif "motorB_rel_deg" in key:
-                motor_b_change = data[i].motors[key] - data[i-1].motors.get(key, 0)
+        for port in motor_ports:
+            motor_key = f"motor{port}_rel_deg"
+            if motor_key in data[i].motors and motor_key in data[i-1].motors:
+                delta = data[i].motors[motor_key] - data[i-1].motors[motor_key]
+                motor_changes.append(delta)
         
-        drive = calculate_speed(motor_a_change, motor_b_change, dt)
+        # Calculate speed based on available motors
+        if motor_changes:
+            drive = calculate_speed(motor_changes[0], motor_changes[1] if len(motor_changes) > 1 else motor_changes[0], dt)
+        else:
+            drive = 0
+        
         yaw_rate = (yaw_unwrapped[i] - yaw_unwrapped[i - 1]) / dt
 
         drive_v.append(drive)
@@ -98,9 +110,9 @@ def velocities(data):
 
     return drive_v, yaw_v
 
-def classify_movements(data):
+def classify_movements(data, config=None):
     segments = []
-    drive_v, yaw_v = velocities(data)
+    drive_v, yaw_v = velocities(data, config)
 
     DRIVE_THRESHOLD = 12
     YAW_THRESHOLD = 12
@@ -138,7 +150,7 @@ def classify_movements(data):
 
 def run(csv_path, config=None):
     data = load_data(csv_path)
-    segments = classify_movements(data)
+    segments = classify_movements(data, config)
     return segments
 
 if __name__ == "__main__":
