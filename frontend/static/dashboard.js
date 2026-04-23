@@ -9,7 +9,6 @@ const saveConfigBtn = document.getElementById("saveConfigBtn");
 const connectBtn = document.getElementById("connectBtn");
 const pullBtn = document.getElementById("pullBtn");
 const analyzeBtn = document.getElementById("analyzeBtn");
-const visualizeBtn = document.getElementById("visualizeBtn");
 const convertBtn = document.getElementById("convertBtn");
 const uploadBtn = document.getElementById("uploadBtn");
 const runBtn = document.getElementById("runBtn");
@@ -19,7 +18,6 @@ const statusBox = document.getElementById("status");
 const terminal = document.getElementById("terminal");
 const configStatus = document.getElementById("configStatus");
 const codePreview = document.getElementById("codePreview");
-const pathCanvas = document.getElementById("pathCanvas");
 const comPort = document.getElementById("comPort");
 const detectPortsBtn = document.getElementById("detectPortsBtn");
 const portStatus = document.getElementById("portStatus");
@@ -263,7 +261,6 @@ analyzeBtn.addEventListener("click", async () => {
         if (response.ok) {
             addTerminal(data.output);
             convertBtn.disabled = false;
-            visualizeBtn.disabled = false;
             statusBox.textContent = "Analysis complete. Click 'Visualize' to see path or 'Generate' to create replay script.";
         } else {
             addTerminal(`[✗] ${data.message}`);
@@ -274,91 +271,6 @@ analyzeBtn.addEventListener("click", async () => {
         analyzeBtn.disabled = false;
     }
 });
-
-visualizeBtn.addEventListener("click", async () => {
-    visualizeBtn.disabled = true;
-    addTerminal("\n[*] Generating visualization...");
-    
-    try {
-        const response = await fetch(`${API_BASE}/visualize`);
-        const data = await response.json();
-        if (response.ok) {
-            addTerminal("[✓] Visualization ready");
-            drawPathVisualization(data.path_data);
-        } else {
-            addTerminal(`[✗] ${data.message}`);
-            visualizeBtn.disabled = false;
-        }
-    } catch (e) {
-        addTerminal(`[✗] ${e.message}`);
-        visualizeBtn.disabled = false;
-    }
-});
-
-// ============================================================
-// PATH VISUALIZATION
-// ============================================================
-
-function drawPathVisualization(pathData) {
-    const ctx = pathCanvas.getContext("2d");
-    const width = pathCanvas.width;
-    const height = pathCanvas.height;
-    
-    // Clear canvas
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, width, height);
-    
-    if (!pathData || pathData.length === 0) {
-        ctx.fillStyle = "#999";
-        ctx.font = "14px Arial";
-        ctx.fillText("No path data", width / 2 - 50, height / 2);
-        return;
-    }
-    
-    // Find bounds
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    pathData.forEach(point => {
-        minX = Math.min(minX, point.x);
-        maxX = Math.max(maxX, point.x);
-        minY = Math.min(minY, point.y);
-        maxY = Math.max(maxY, point.y);
-    });
-    
-    // Add padding
-    const padding = 40;
-    const rangeX = maxX - minX || 100;
-    const rangeY = maxY - minY || 100;
-    const scaleX = (width - 2 * padding) / rangeX;
-    const scaleY = (height - 2 * padding) / rangeY;
-    const scale = Math.min(scaleX, scaleY);
-    
-    // Transform coordinates
-    const toCanvasX = x => padding + (x - minX) * scale;
-    const toCanvasY = y => padding + (y - minY) * scale;
-    
-    // Draw path (light blue ribbon)
-    ctx.strokeStyle = "#87CEEB";
-    ctx.lineWidth = 12;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.beginPath();
-    ctx.moveTo(toCanvasX(pathData[0].x), toCanvasY(pathData[0].y));
-    for (let i = 1; i < pathData.length; i++) {
-        ctx.lineTo(toCanvasX(pathData[i].x), toCanvasY(pathData[i].y));
-    }
-    ctx.stroke();
-    
-    // Draw robot (vivid deep yellow square)
-    const robotSize = 16;
-    const lastPoint = pathData[pathData.length - 1];
-    const robotX = toCanvasX(lastPoint.x) - robotSize / 2;
-    const robotY = toCanvasY(lastPoint.y) - robotSize / 2;
-    ctx.fillStyle = "#FFD700";
-    ctx.fillRect(robotX, robotY, robotSize, robotSize);
-    ctx.strokeStyle = "#FFA500";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(robotX, robotY, robotSize, robotSize);
-}
 
 convertBtn.addEventListener("click", async () => {
     convertBtn.disabled = true;
