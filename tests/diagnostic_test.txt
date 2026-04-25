@@ -1,4 +1,4 @@
-NOTE:!!!!!!! Run each command in order. Paste the output after each one.
+NOTE: Run each command in order in the root folder terminal; Paste the output after each one.
 ------------------------------------------------------
 STEP 1: TEST BASIC CONNECTION
 mpremote connect COM7 exec "print('Connection OK')" 2>&1

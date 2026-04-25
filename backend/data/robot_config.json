@@ -6,7 +6,7 @@
     "C": true
   },
   "sensors": {
-    "distance": "D",
-    "force": "F"
+    "force": "F",
+    "distance": "E"
   }
 }
