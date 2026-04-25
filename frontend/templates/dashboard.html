@@ -162,42 +162,123 @@
         <div id="setupBanner" class="setup-banner">
             <h3>Setup Required: Local Agent</h3>
             <p>
-                This app needs a local agent running on your computer to detect ports and communicate with your robot.
+                Follow these steps to enable port detection and robot communication on this website.
             </p>
 
+            <!-- STEP 1: DOWNLOAD -->
             <div class="step">
-                <strong>Step 1: Download</strong>
+                <strong>Step 1: Download the file</strong>
                 <p>
-                    <a href="https://github.com/9Akshit1/FLL-Robot-Tracker/blob/main/local_agent.py" target="_blank">
-                        Download local_agent.py from GitHub
+                    Click this link to download <code>local_agent.py</code>:
+                </p>
+                <p style="margin-top: 8px;">
+                    <a href="https://github.com/9Akshit1/FLL-Robot-Tracker/raw/main/local_agent.py" target="_blank" style="font-size: 14px; padding: 8px 12px; background: #0056b3; color: white; border-radius: 4px; text-decoration: none; display: inline-block;">
+                        Download local_agent.py
                     </a>
                 </p>
-            </div>
-
-            <div class="step">
-                <strong>Step 2: Install</strong>
-                <p>
-                    <code>pip install flask pyserial mpremote</code>
+                <p style="font-size: 12px; color: #999; margin-top: 8px;">
+                    A file named <code>local_agent.py</code> will appear in your Downloads folder.
                 </p>
             </div>
 
+            <!-- STEP 2: FIND FILE -->
             <div class="step">
-                <strong>Step 3: Run</strong>
+                <strong>Step 2: Find your Downloads folder</strong>
                 <p>
-                    <code>python local_agent.py</code>
+                    Look for the <code>local_agent.py</code> file you just downloaded.
                 </p>
-                <p style="font-size: 12px; color: #999; margin-top: 5px;">
-                    Keep this terminal open while using this website.
+                <p style="font-size: 12px; color: #999; margin-top: 8px;">
+                    <strong>Windows:</strong> Open File Explorer, look in "Downloads" on the left
+                </p>
+                <p style="font-size: 12px; color: #999; margin-top: 4px;">
+                    <strong>Mac:</strong> Open Finder, click "Downloads" at the bottom
+                </p>
+                <p style="font-size: 12px; color: #999; margin-top: 4px;">
+                    <strong>Linux:</strong> Open your file manager, look in Downloads folder
+                </p>
+                <p style="font-size: 12px; color: #666; margin-top: 8px;">
+                    Make sure the file is there before continuing.
                 </p>
             </div>
 
+            <!-- STEP 3: OPEN TERMINAL -->
             <div class="step">
-                <strong>Step 4: Refresh</strong>
+                <strong>Step 3: Open a terminal</strong>
                 <p>
-                    <button onclick="location.reload()" style="padding: 6px 12px; font-size: 12px;">
-                        Refresh Page
+                    Open a command prompt or terminal on your computer:
+                </p>
+                <p style="font-size: 12px; color: #999; margin-top: 8px;">
+                    <strong>Windows:</strong> Press <code>WIN + R</code>, type <code>cmd</code>, press Enter
+                </p>
+                <p style="font-size: 12px; color: #999; margin-top: 4px;">
+                    <strong>Mac:</strong> Press <code>CMD + Space</code>, type <code>terminal</code>, press Enter
+                </p>
+                <p style="font-size: 12px; color: #999; margin-top: 4px;">
+                    <strong>Linux:</strong> Open your terminal application
+                </p>
+            </div>
+
+            <!-- STEP 4: INSTALL PACKAGES -->
+            <div class="step">
+                <strong>Step 4: Install required packages</strong>
+                <p>
+                    Copy and paste this into your terminal, then press Enter:
+                </p>
+                <p style="background: #f5f5f5; padding: 10px; border-radius: 3px; font-size: 12px; font-family: 'Courier New', monospace; margin-top: 8px; word-break: break-all;">
+                    pip install flask pyserial mpremote
+                </p>
+                <p style="font-size: 12px; color: #666; margin-top: 8px;">
+                    Wait for the installation to finish (you'll see lines appearing in the terminal).
+                </p>
+            </div>
+
+            <!-- STEP 5: NAVIGATE TO FILE -->
+            <div class="step">
+                <strong>Step 5: Go to your Downloads folder</strong>
+                <p>
+                    In the terminal, type this command and press Enter:
+                </p>
+                <p style="background: #f5f5f5; padding: 10px; border-radius: 3px; font-size: 12px; font-family: 'Courier New', monospace; margin-top: 8px; word-break: break-all;">
+                    cd Downloads
+                </p>
+                <p style="font-size: 12px; color: #999; margin-top: 8px;">
+                    This moves to your Downloads folder where you saved the file.
+                </p>
+            </div>
+
+            <!-- STEP 6: RUN AGENT -->
+            <div class="step">
+                <strong>Step 6: Run the agent</strong>
+                <p>
+                    In the terminal, type this command and press Enter:
+                </p>
+                <p style="background: #f5f5f5; padding: 10px; border-radius: 3px; font-size: 12px; font-family: 'Courier New', monospace; margin-top: 8px; word-break: break-all;">
+                    python local_agent.py
+                </p>
+                <p style="font-size: 12px; color: #666; margin-top: 8px;">
+                    You should see text like: <code>Starting Flask server on http://0.0.0.0:5001</code>
+                </p>
+                <p style="font-size: 12px; color: #666; margin-top: 4px;">
+                    <strong>Keep this terminal open</strong> while using this website.
+                </p>
+            </div>
+
+            <!-- STEP 7: REFRESH -->
+            <div class="step">
+                <strong>Step 7: Refresh this page</strong>
+                <p>
+                    Once you see the message in the terminal, click the button below to refresh this website:
+                </p>
+                <p style="margin-top: 10px;">
+                    <button onclick="location.reload()" style="padding: 8px 16px; font-size: 12px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Refresh This Page
                     </button>
-                    <span id="agentStatusBadge" class="agent-status disconnected">Agent: Offline</span>
+                </p>
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                    Status: <span id="agentStatusBadge" class="agent-status disconnected">Agent: Offline</span>
+                </p>
+                <p style="font-size: 12px; color: #666; margin-top: 4px;">
+                    If it says "Agent: Online", you're all set! If not, check the terminal for any error messages.
                 </p>
             </div>
         </div>
