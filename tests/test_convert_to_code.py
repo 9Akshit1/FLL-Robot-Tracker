@@ -22,15 +22,16 @@ class TestLoadRows:
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
             f.write(csv_content)
-            f.flush()
-            
-            rows = load_rows(f.name)
+            temp_path = f.name
+        
+        try:
+            rows = load_rows(temp_path)
             assert len(rows) == 3
             assert rows[0]['t'] == 0
             assert rows[1]['t'] == 150
             assert 'A_rel' in rows[1]
-            
-            Path(f.name).unlink()
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
     
     def test_motor_extraction(self):
         """Test extracting motor deltas"""
@@ -41,17 +42,18 @@ class TestLoadRows:
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
             f.write(csv_content)
-            f.flush()
-            
-            rows = load_rows(f.name)
+            temp_path = f.name
+        
+        try:
+            rows = load_rows(temp_path)
             
             # Check motor columns exist
             assert 'A_rel' in rows[1]
             assert 'B_rel' in rows[1]
             assert rows[1]['A_rel'] == 45
             assert rows[1]['B_rel'] == 30
-            
-            Path(f.name).unlink()
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
     
     def test_skip_malformed_rows(self):
         """Test skipping malformed rows"""
@@ -63,13 +65,14 @@ invalid data
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
             f.write(csv_content)
-            f.flush()
-            
+            temp_path = f.name
+        
+        try:
             # Should not crash, just skip bad rows
-            rows = load_rows(f.name)
+            rows = load_rows(temp_path)
             assert len(rows) >= 1
-            
-            Path(f.name).unlink()
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
     
     def test_empty_csv(self):
         """Test loading empty CSV"""
@@ -77,12 +80,13 @@ invalid data
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
             f.write(csv_content)
-            f.flush()
-            
-            rows = load_rows(f.name)
+            temp_path = f.name
+        
+        try:
+            rows = load_rows(temp_path)
             assert len(rows) == 0
-            
-            Path(f.name).unlink()
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
 
 
 class TestGenerateSpikeScript:
@@ -97,12 +101,13 @@ class TestGenerateSpikeScript:
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f_in:
             f_in.write(csv_content)
-            f_in.flush()
-            
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
-                output_path = f_out.name
-            
-            generate_spike_script(f_in.name, output_path)
+            csv_path = f_in.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
+            output_path = f_out.name
+        
+        try:
+            generate_spike_script(csv_path, output_path)
             
             # Check file was created
             assert Path(output_path).exists()
@@ -113,9 +118,9 @@ class TestGenerateSpikeScript:
             assert 'import motor' in content
             assert 'timeline' in content
             assert 'async def main' in content
-            
-            Path(f_in.name).unlink()
-            Path(output_path).unlink()
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+            Path(output_path).unlink(missing_ok=True)
     
     def test_timeline_structure(self):
         """Test that timeline has correct structure"""
@@ -126,20 +131,21 @@ class TestGenerateSpikeScript:
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f_in:
             f_in.write(csv_content)
-            f_in.flush()
-            
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
-                output_path = f_out.name
-            
-            generate_spike_script(f_in.name, output_path)
+            csv_path = f_in.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
+            output_path = f_out.name
+        
+        try:
+            generate_spike_script(csv_path, output_path)
             content = Path(output_path).read_text()
             
             # Timeline should have format: (dt, dA, dB, ...)
             assert 'timeline = [' in content
             assert '(150' in content or '(150,' in content
-            
-            Path(f_in.name).unlink()
-            Path(output_path).unlink()
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+            Path(output_path).unlink(missing_ok=True)
     
     def test_motor_delta_calculation(self):
         """Test that motor deltas are calculated correctly"""
@@ -150,20 +156,21 @@ class TestGenerateSpikeScript:
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f_in:
             f_in.write(csv_content)
-            f_in.flush()
-            
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
-                output_path = f_out.name
-            
-            generate_spike_script(f_in.name, output_path)
+            csv_path = f_in.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
+            output_path = f_out.name
+        
+        try:
+            generate_spike_script(csv_path, output_path)
             content = Path(output_path).read_text()
             
             # Between frame 0->1: dt=150, dA=45, dB=30
             # Between frame 1->2: dt=150, dA=45, dB=30
             assert '150, 45, 30' in content or '(150, 45, 30)' in content
-            
-            Path(f_in.name).unlink()
-            Path(output_path).unlink()
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+            Path(output_path).unlink(missing_ok=True)
     
     def test_config_aware_motors(self):
         """Test that script respects motor config"""
@@ -182,22 +189,23 @@ class TestGenerateSpikeScript:
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f_in:
             f_in.write(csv_content)
-            f_in.flush()
-            
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
-                output_path = f_out.name
-            
-            generate_spike_script(f_in.name, output_path, config=config)
+            csv_path = f_in.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
+            output_path = f_out.name
+        
+        try:
+            generate_spike_script(csv_path, output_path, config=config)
             content = Path(output_path).read_text()
             
             # Should have A and B but not C
             assert 'motor.run_for_degrees(port.A' in content
             assert 'motor.run_for_degrees(port.B' in content
-            # C should not appear in motor commands (only in timeline data)
-            assert 'motor.run_for_degrees(port.C' not in content or 'if dC != 0' not in content
-            
-            Path(f_in.name).unlink()
-            Path(output_path).unlink()
+            # C should not appear in motor commands
+            assert 'motor.run_for_degrees(port.C' not in content
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+            Path(output_path).unlink(missing_ok=True)
     
     def test_error_empty_csv(self):
         """Test that empty CSV raises error"""
@@ -205,15 +213,17 @@ class TestGenerateSpikeScript:
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f_in:
             f_in.write(csv_content)
-            f_in.flush()
-            
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
-                output_path = f_out.name
-            
+            csv_path = f_in.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
+            output_path = f_out.name
+        
+        try:
             with pytest.raises(RuntimeError, match="No data loaded"):
-                generate_spike_script(f_in.name, output_path)
-            
-            Path(f_in.name).unlink()
+                generate_spike_script(csv_path, output_path)
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+            Path(output_path).unlink(missing_ok=True)
     
     def test_speed_computation(self):
         """Test that speed computation is included"""
@@ -224,20 +234,21 @@ class TestGenerateSpikeScript:
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f_in:
             f_in.write(csv_content)
-            f_in.flush()
-            
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
-                output_path = f_out.name
-            
-            generate_spike_script(f_in.name, output_path)
+            csv_path = f_in.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
+            output_path = f_out.name
+        
+        try:
+            generate_spike_script(csv_path, output_path)
             content = Path(output_path).read_text()
             
             # Should include speed computation
             assert 'compute_speed' in content
             assert 'def compute_speed' in content
-            
-            Path(f_in.name).unlink()
-            Path(output_path).unlink()
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+            Path(output_path).unlink(missing_ok=True)
 
 
 class TestScriptExecutability:
@@ -251,19 +262,20 @@ class TestScriptExecutability:
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f_in:
             f_in.write(csv_content)
-            f_in.flush()
-            
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
-                output_path = f_out.name
-            
-            generate_spike_script(f_in.name, output_path)
+            csv_path = f_in.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f_out:
+            output_path = f_out.name
+        
+        try:
+            generate_spike_script(csv_path, output_path)
             content = Path(output_path).read_text()
             
             # Should compile without syntax errors
             compile(content, output_path, 'exec')
-            
-            Path(f_in.name).unlink()
-            Path(output_path).unlink()
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+            Path(output_path).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

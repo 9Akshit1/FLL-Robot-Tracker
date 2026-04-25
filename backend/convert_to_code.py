@@ -1,5 +1,5 @@
 # ============================================================
-# convert_to_code.py - Dynamic Motor Support
+# convert_to_code.py - Dynamic Motor Support (FIXED)
 # ============================================================
 
 import csv
@@ -20,22 +20,30 @@ def load_rows(csv_path, config=None):
             if not r.get("time_ms") or str(r["time_ms"]).strip().startswith('#'):
                 continue
 
-            # Dynamically extract motor data
-            row = {'t': int(float(r['time_ms']))}
-            
-            # Get motor ports from config
-            motor_ports = []
-            if config and "motors" in config:
-                motor_ports = [p for p, enabled in config["motors"].items() if enabled]
-            
-            for key, val in r.items():
-                if "_rel_deg" in key:
-                    # Extract motor letter (A, B, C, etc)
-                    motor_letter = key.split('motor')[1][0]
-                    if not motor_ports or motor_letter in motor_ports:
-                        row[f'{motor_letter}_rel'] = int(float(val))
+            try:
+                # Dynamically extract motor data
+                row = {'t': int(float(r['time_ms']))}
+                
+                # Get motor ports from config
+                motor_ports = []
+                if config and "motors" in config:
+                    motor_ports = [p for p, enabled in config["motors"].items() if enabled]
+                
+                for key, val in r.items():
+                    if "_rel_deg" in key:
+                        # Extract motor letter (A, B, C, etc)
+                        motor_letter = key.split('motor')[1][0]
+                        if not motor_ports or motor_letter in motor_ports:
+                            try:
+                                row[f'{motor_letter}_rel'] = int(float(val))
+                            except (ValueError, TypeError):
+                                # Skip malformed motor data
+                                continue
 
-            rows.append(row)
+                rows.append(row)
+            except (ValueError, TypeError, KeyError):
+                # Skip malformed rows entirely
+                continue
 
     print("Loaded rows:", len(rows))
     return rows

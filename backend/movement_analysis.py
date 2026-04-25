@@ -1,5 +1,5 @@
 # ============================================================
-# movement_analysis.py - Dynamic Column Support
+# movement_analysis.py - Dynamic Column Support (FIXED)
 # ============================================================
 
 import csv
@@ -16,13 +16,19 @@ class DataPoint:
         self.motors = {}
         for key, val in data_dict.items():
             if "_rel_deg" in key or "_abs_deg" in key:
-                self.motors[key] = float(val)
+                try:
+                    self.motors[key] = float(val)
+                except (ValueError, TypeError):
+                    self.motors[key] = 0.0
         
         # Sensor data - dynamically extract
         self.sensors = {}
         for key, val in data_dict.items():
             if "_mm" in key or "_N" in key:
-                self.sensors[key] = float(val)
+                try:
+                    self.sensors[key] = float(val)
+                except (ValueError, TypeError):
+                    self.sensors[key] = 0.0
         
         # IMU data
         self.yaw = float(data_dict.get("yaw_deg", 0))
@@ -40,7 +46,11 @@ def load_data(csv_path):
             if not r.get("time_ms") or str(r["time_ms"]).startswith("#"):
                 continue
             
-            data.append(DataPoint(r))
+            try:
+                data.append(DataPoint(r))
+            except (ValueError, TypeError, KeyError):
+                # Skip malformed rows
+                continue
     return data
 
 def unwrap_angles(deg_list):
@@ -92,10 +102,13 @@ def velocities(data, config=None):
         motor_changes = []
         
         for port in motor_ports:
-            motor_key = f"motor{port}_rel_deg"
-            if motor_key in data[i].motors and motor_key in data[i-1].motors:
-                delta = data[i].motors[motor_key] - data[i-1].motors[motor_key]
-                motor_changes.append(delta)
+            motor_key = f"motorA_rel_deg" if port == "A" else f"motor{port}_rel_deg"
+            # Try both naming conventions
+            for naming_convention in [f"motor{port}_rel_deg", f"motorA_rel_deg"]:
+                if naming_convention in data[i].motors and naming_convention in data[i-1].motors:
+                    delta = data[i].motors[naming_convention] - data[i-1].motors[naming_convention]
+                    motor_changes.append(delta)
+                    break
         
         # Calculate speed based on available motors
         if motor_changes:
@@ -111,6 +124,10 @@ def velocities(data, config=None):
     return drive_v, yaw_v
 
 def classify_movements(data, config=None):
+    """Classify robot movements into segments"""
+    if not data:
+        return []
+    
     segments = []
     drive_v, yaw_v = velocities(data, config)
 
@@ -125,26 +142,39 @@ def classify_movements(data, config=None):
     for i in range(len(data)):
         label = "stationary"
         
-        if abs(drive_v[i]) > DRIVE_THRESHOLD:
-            if abs(yaw_v[i]) > YAW_THRESHOLD:
-                label = "turning_left" if yaw_v[i] > 0 else "turning_right"
-            else:
-                label = "driving_straight"
+        if abs(yaw_v[i]) > YAW_THRESHOLD:
+            label = "turning_left" if yaw_v[i] > 0 else "turning_right"
+        elif abs(drive_v[i]) > DRIVE_THRESHOLD:
+            label = "driving_straight"
 
         if label != current:
             if current is not None:
-                if data[i].t - start_t >= MIN_SEGMENT_MS:
+                duration_ms = data[i].t - start_t
+                if duration_ms >= MIN_SEGMENT_MS:
                     avg_speed = sum(drive_v[start_idx:i]) / max(1, i - start_idx)
                     segments.append({
                         'start': start_t,
                         'end': data[i].t,
                         'type': current,
                         'avg_speed': round(avg_speed, 2),
-                        'duration': round((data[i].t - start_t) / 1000, 2)
+                        'duration': round(duration_ms / 1000, 2)
                     })
             current = label
             start_t = data[i].t
             start_idx = i
+
+    # Add final segment if exists
+    if current is not None and len(data) > start_idx:
+        duration_ms = data[-1].t - start_t
+        if duration_ms >= MIN_SEGMENT_MS:
+            avg_speed = sum(drive_v[start_idx:]) / max(1, len(data) - start_idx)
+            segments.append({
+                'start': start_t,
+                'end': data[-1].t,
+                'type': current,
+                'avg_speed': round(avg_speed, 2),
+                'duration': round(duration_ms / 1000, 2)
+            })
 
     return segments
 
