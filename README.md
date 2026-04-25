@@ -9,7 +9,10 @@ A web-based system for LEGO First Robotics League teams to record, analyze, and 
 3. **Generate** - Convert recorded movements into a Python replay script
 4. **Replay** - Execute the generated script on your robot to repeat the exact motion
 
-## Quick Start
+## Easy Use
+Visit `https://aksh19.pythonanywhere.com/` in your browser and follow the instructions there. Connect your robot brain with USB cable.
+
+## Quick Start (to run on local)
 
 ### Requirements
 - Python 3.8+
@@ -92,7 +95,6 @@ pytest tests/ --cov=backend --cov-report=html
 ### Local Network
 ```bash
 python app.py
-# Accessible at http://192.168.1.x:5000 (replace x with your IP)
 ```
 
 ## License
