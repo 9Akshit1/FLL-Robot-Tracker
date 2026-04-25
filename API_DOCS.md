@@ -1,12 +1,9 @@
-# FLL Robot Tracker - API Reference
+# API Reference
 
-## Base URL
+## Local-Use URL
 ```
 http://127.0.0.1:5000
 ```
-
-## Authentication
-None required (local only). For production, add token authentication.
 
 ---
 
@@ -326,6 +323,10 @@ time_ms,motorA_rel_deg,motorA_abs_deg,motorB_rel_deg,motorB_abs_deg,motorC_rel_d
 ## Example Workflow (cURL)
 
 ```bash
+# 0. Run the code as done in README.md
+# - Create python env and isntall requirements
+# - Then run: python app.py
+
 # 1. Detect ports
 curl http://127.0.0.1:5000/detect_ports
 
