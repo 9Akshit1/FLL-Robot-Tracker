@@ -45,16 +45,6 @@ pytest tests/ -m "not slow"
 pytest tests/test_movement_analysis.py::TestDataPoint::test_init_basic -v
 ```
 
-### Coverage Goals
-
-| Component | Target | Current |
-|-----------|--------|---------|
-| movement_analysis.py | 85% | - |
-| convert_to_code.py | 85% | - |
-| app.py | 60% | - |
-
-Run: `pytest tests/ --cov=backend --cov-report=term-missing`
-
 ---
 
 ## Manual Testing Scenarios
@@ -373,23 +363,6 @@ app.run(debug=True)  # Enables interactive debugger
 mpremote --help
 mpremote connect COM3 ls /flash  # List files on robot
 mpremote connect COM3 cat /flash/data_log.csv | head -20  # View CSV
-```
-
----
-
-## Current
-
-```markdown
-# Test Report - 2026-04-25
-
-## Scenarios Tested
-- [x] Invalid Configuration - PASSED
-- [x] Missing Robot Connection - PASSED
-- [x] Corrupt CSV - FAILED - See issue #3
-- [x] Rapid Button Clicks - PASSED
-- [x] Large CSV Files - PASSED
-- [ ] Network Failures (not tested)
-- [ ] Permission Errors (not tested)
 ```
 
 ---
