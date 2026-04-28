@@ -1,10 +1,6 @@
 // frontend/static/dashboard.js
 
-const API_BASE = "http://127.0.0.1:5000";
-
-// For local testing: const AGENT_URL = "http://127.0.0.1:5001";
-// For cloud deployment: auto-detect agent on localhost
-// Users run local_agent.py on THEIR computer, which is always localhost from their perspective
+const API_BASE = window.location.origin; 
 const AGENT_URL = "http://localhost:5001";
 
 let terminalOutput = [];
@@ -384,9 +380,9 @@ if (pullBtn) {
     pullBtn.addEventListener("click", async () => {
         pullBtn.disabled = true;
         addTerminal("\n[*] Pulling CSV...");
-        
+
         try {
-            const response = awafetch(`${AGENT_URL}/agent/pull`);
+            const response = await fetch(`${AGENT_URL}/agent/pull`);
             const data = await response.json();
             if (response.ok) {
                 addTerminal(`[✓] CSV pulled (${data.csv_size} bytes)`);
@@ -459,7 +455,15 @@ if (uploadBtn) {
         addTerminal("\n[*] Uploading script...");
         
         try {
-            const response = awafetch(`${AGENT_URL}/agent/upload_script`);
+            // First: Get the generated script from PythonAnywhere
+            const scriptRes = await fetch(`${API_BASE}/get_generated_script`); 
+            const scriptData = await scriptRes.json();
+            // Second: Send it to the local agent
+            const response = await fetch(`${AGENT_URL}/agent/upload`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ script: scriptData.script })
+            });
             const data = await response.json();
             if (response.ok) {
                 addTerminal(data.output);
@@ -483,7 +487,7 @@ if (runBtn) {
         addTerminal("[*] Watch your robot!");
         
         try {
-            const response = awafetch(`${AGENT_URL}/agent/run`);
+            const response = await fetch(`${AGENT_URL}/agent/run`);
             const data = await response.json();
             if (response.ok) {
                 addTerminal(data.output);
