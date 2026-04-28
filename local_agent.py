@@ -360,13 +360,13 @@ def agent_pull():
     logger.info("Pull CSV request received")
     
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         selected_port = data.get("com_port", COM_PORT)
         
         csv_path = AGENT_DATA_DIR / "data_log.csv"
         
         logger.info(f"Pulling CSV from {selected_port}...")
-        cmd = ["mpremote", "connect", selected_port, "cp", ":/flash/data_log.csv", str(csv_path.absolute())]
+        cmd = ["mpremote", "connect", selected_port, "cp", ":data_log.csv", str(csv_path.absolute())]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         
         if result.returncode != 0:
@@ -483,7 +483,7 @@ def agent_run():
     logger.info("Run script request received")
     
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         selected_port = data.get("com_port", COM_PORT)
         
         logger.info(f"Executing on {selected_port}...")

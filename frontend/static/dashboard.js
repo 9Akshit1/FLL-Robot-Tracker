@@ -408,7 +408,11 @@ if (pullBtn) {
         addTerminal("\n[*] Pulling CSV...");
 
         try {
-            const response = await fetch(`${AGENT_URL}/agent/pull`);
+            const response = await fetch(`${AGENT_URL}/agent/pull`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ com_port: comPortSelected })
+            });
             const data = await response.json();
             if (response.ok) {
                 addTerminal(`[✓] CSV pulled (${data.csv_size} bytes)`);
@@ -513,7 +517,11 @@ if (runBtn) {
         addTerminal("[*] Watch your robot!");
         
         try {
-            const response = await fetch(`${AGENT_URL}/agent/run`);
+            const response = await fetch(`${AGENT_URL}/agent/run`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ com_port: comPortSelected })
+            });
             const data = await response.json();
             if (response.ok) {
                 addTerminal(data.output);
