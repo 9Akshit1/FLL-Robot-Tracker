@@ -1,1 +1,0 @@
-{"motors": {"A": {"port": "B", "type": "motor"}, "B": {"port": "A", "type": "motor"}, "C": {"port": "C", "type": "motor"}}, "sensors": {"D": {"port": "None", "type": "distance_sensor"}, "F": {"port": "None", "type": "force_sensor"}}}
