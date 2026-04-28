@@ -1,0 +1,12 @@
+{
+    "com_port": "COM7",
+    "motors": {
+        "A": true,
+        "B": true,
+        "C": true
+    },
+    "sensors": {
+        "distance": "D",
+        "force": "F"
+    }
+}

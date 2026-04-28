@@ -393,6 +393,42 @@ def agent_pull():
         logger.error(f"Pull failed: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+@app.route("/agent/config", methods=["POST"])
+def agent_config():
+    """
+    Upload robot configuration to the agent
+    
+    Expects JSON:
+        {
+            "config": { ... },
+            "com_port": "COM3"
+        }
+    """
+    logger.info("Config upload request received")
+    
+    try:
+        data = request.get_json()
+        if not data or not data.get("config"):
+            return jsonify({"error": "config data required"}), 400
+        
+        config_data = data["config"]
+        
+        # Save config locally for reference
+        config_path = AGENT_DATA_DIR / "robot_config.json"
+        with open(config_path, 'w') as f:
+            json.dump(config_data, f, indent=4)
+            
+        logger.info(f"Config saved locally to {config_path}")
+        
+        return jsonify({
+            "status": "success",
+            "message": "Configuration saved to local agent"
+        })
+    
+    except Exception as e:
+        logger.error(f"Config upload failed: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/agent/upload", methods=["POST"])
 def agent_upload():
     """
