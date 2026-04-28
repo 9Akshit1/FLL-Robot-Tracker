@@ -23,7 +23,8 @@ app = Flask(__name__,
 )
 
 current_config = ROBOT_CONFIG.copy()
-COLLECT_DATA_SCRIPT = Path("backend") / "collect_data_2_0.py"
+BASE_DIR = Path(__file__).parent
+COLLECT_DATA_SCRIPT = BASE_DIR / "backend" / "collect_data_2_0.py"
 
 # Local Agent Configuration
 AGENT_URL = os.getenv("AGENT_URL", "http://localhost:5001")
@@ -192,7 +193,23 @@ def connect():
     Get connection script and port for local agent
     """
     try:
-        print("[CONNECT] Getting connection script...")
+        print(f"[CONNECT] Current working directory: {os.getcwd()}")
+        print(f"[CONNECT] Looking for script at: {COLLECT_DATA_SCRIPT}")
+        print(f"[CONNECT] Absolute path: {COLLECT_DATA_SCRIPT.absolute()}")
+        
+        # List contents of current directory
+        try:
+            contents = list(Path(".").iterdir())
+            print(f"[CONNECT] Current directory contents: {[str(p) for p in contents]}")
+        except Exception as e:
+            print(f"[CONNECT] Error listing directory: {e}")
+        
+        # Check if backend exists
+        backend_path = Path("backend")
+        if backend_path.exists():
+            print(f"[CONNECT] Backend exists, contents: {list(backend_path.iterdir())}")
+        else:
+            print("[CONNECT] Backend directory not found")
         
         # Get collection script
         if not COLLECT_DATA_SCRIPT.exists():
@@ -200,7 +217,7 @@ def connect():
             return jsonify({
                 "status": "Error",
                 "message": "Collection script not found",
-                "output": "✗ collect_data_2_0.py not found"
+                "output": f"✗ {COLLECT_DATA_SCRIPT} not found"
             }), 500
         
         print(f"[CONNECT] Found script at {COLLECT_DATA_SCRIPT}")
