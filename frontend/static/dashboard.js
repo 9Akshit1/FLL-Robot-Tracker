@@ -360,6 +360,13 @@ if (connectBtn) {
         
         try {
             const response = await fetch(`${AGENT_URL}/agent/connect`);
+            // Add this check BEFORE calling .json()
+            if (!response.ok) {
+                const errorText = await response.text(); // Get the HTML error as text
+                console.error("Server returned an error:", errorText);
+                throw new Error(`Server Error: ${response.status}`);
+            }
+
             const data = await response.json();
             if (response.ok) {
                 addTerminal("[✓] Recording complete");

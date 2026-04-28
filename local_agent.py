@@ -276,7 +276,7 @@ def run_mpremote(args, timeout=10):
 # ROBOT COMMUNICATION ENDPOINTS
 # ============================================================
 
-@app.route("/agent/connect", methods=["POST"])
+@app.route("/agent/connect", methods=["GET", "POST"])
 def agent_connect():
     """
     Upload collection script to robot and start recording
@@ -342,7 +342,7 @@ def agent_connect():
         logger.error(f"Connect failed: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route("/agent/pull", methods=["POST"])
+@app.route("/agent/pull", methods=["GET", "POST"])
 def agent_pull():
     """
     Pull CSV data from robot
@@ -472,7 +472,7 @@ def agent_upload():
         logger.error(f"Upload failed: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-@app.route("/agent/run", methods=["POST"])
+@app.route("/agent/run", methods=["GET", "POST"])
 def agent_run():
     """
     Execute replay script on robot
