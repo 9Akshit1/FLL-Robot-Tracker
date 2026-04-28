@@ -552,15 +552,20 @@ def agent_status():
             "agent_url": AGENT_URL
         })
 
-@app.route("/debug_files")
-def debug_files():
-    """Debug endpoint to list files"""
+@app.route("/debug_csv")
+def debug_csv():
+    """Debug CSV file"""
     try:
-        base_dir = Path(__file__).parent
-        files = []
-        for item in base_dir.iterdir():
-            files.append(str(item))
-        return jsonify({"base_dir": str(base_dir), "files": files})
+        exists = LOCAL_CSV_PATH.exists()
+        size = LOCAL_CSV_PATH.stat().st_size if exists else 0
+        content = LOCAL_CSV_PATH.read_text()[:200] if exists else "No file"
+        return jsonify({
+            "path": str(LOCAL_CSV_PATH),
+            "absolute_path": str(LOCAL_CSV_PATH.absolute()),
+            "exists": exists,
+            "size": size,
+            "content_preview": content
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
