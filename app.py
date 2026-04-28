@@ -276,6 +276,7 @@ def pull_csv():
                 "output": "✗ CSV is empty"
             }), 500
         
+        LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
         LOCAL_CSV_PATH.write_text(csv_content)
         csv_size = result.get("csv_size", len(csv_content))
         
