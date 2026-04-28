@@ -356,10 +356,29 @@ if (connectBtn) {
     connectBtn.addEventListener("click", async () => {
         connectBtn.disabled = true;
         clearTerminal();
-        addTerminal("[*] Uploading code...");
+        addTerminal("[*] Getting script...");
         
         try {
-            const response = await fetch(`${AGENT_URL}/agent/connect`);
+            // First: Get the script from the server
+            const scriptRes = await fetch('/connect');
+            if (!scriptRes.ok) {
+                const errorText = await scriptRes.text();
+                console.error("Failed to get script:", errorText);
+                throw new Error(`Failed to get script: ${scriptRes.status}`);
+            }
+            const scriptData = await scriptRes.json();
+            
+            addTerminal("[*] Uploading code...");
+            
+            // Second: Send to agent
+            const response = await fetch(`${AGENT_URL}/agent/connect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    script_content: scriptData.script_content,
+                    com_port: scriptData.com_port
+                })
+            });
             // Add this check BEFORE calling .json()
             if (!response.ok) {
                 const errorText = await response.text(); // Get the HTML error as text

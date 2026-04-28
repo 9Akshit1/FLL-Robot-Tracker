@@ -276,7 +276,7 @@ def run_mpremote(args, timeout=10):
 # ROBOT COMMUNICATION ENDPOINTS
 # ============================================================
 
-@app.route("/agent/connect", methods=["GET", "POST"])
+@app.route("/agent/connect", methods=["POST"])
 def agent_connect():
     """
     Upload collection script to robot and start recording

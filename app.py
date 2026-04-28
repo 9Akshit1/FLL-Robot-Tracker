@@ -189,10 +189,10 @@ def index():
 @app.route("/connect")
 def connect():
     """
-    Connect and start recording (via local agent)
+    Get connection script and port for local agent
     """
     try:
-        print("[CONNECT] Starting connection via local agent...")
+        print("[CONNECT] Getting connection script...")
         
         # Get collection script
         if not COLLECT_DATA_SCRIPT.exists():
@@ -210,31 +210,9 @@ def connect():
         selected_port = current_config.get("com_port", "COM3")
         print(f"[CONNECT] Using port: {selected_port}")
         
-        # Call agent to upload and execute
-        print("[CONNECT] Calling agent to upload and execute...")
-        result = call_agent(
-            "/agent/connect",
-            method="POST",
-            data={
-                "script_content": script_content,
-                "com_port": selected_port
-            },
-            timeout=700  # 10 min + buffer
-        )
-        
-        if "error" in result:
-            print(f"[CONNECT] Agent error: {result['error']}")
-            return jsonify({
-                "status": "Error",
-                "message": result["error"],
-                "output": f"✗ {result['error']}"
-            }), 500
-        
-        print("[CONNECT] Recording completed successfully")
         return jsonify({
-            "status": "Recording complete",
-            "message": "Ready to pull data",
-            "output": "✓ Code uploaded via agent\n✓ Recording complete"
+            "script_content": script_content,
+            "com_port": selected_port
         })
     
     except Exception as e:
