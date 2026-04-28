@@ -552,20 +552,16 @@ def agent_status():
             "agent_url": AGENT_URL
         })
 
-@app.route("/debug_csv")
-def debug_csv():
-    """Debug CSV file"""
+@app.route("/get_generated_script")
+def get_generated_script():
+    """Get the generated replay script"""
     try:
-        exists = LOCAL_CSV_PATH.exists()
-        size = LOCAL_CSV_PATH.stat().st_size if exists else 0
-        content = LOCAL_CSV_PATH.read_text()[:200] if exists else "No file"
-        return jsonify({
-            "path": str(LOCAL_CSV_PATH),
-            "absolute_path": str(LOCAL_CSV_PATH.absolute()),
-            "exists": exists,
-            "size": size,
-            "content_preview": content
-        })
+        if not GENERATED_SCRIPT_PATH.exists():
+            return jsonify({"error": "Script not generated"}), 404
+        
+        script = GENERATED_SCRIPT_PATH.read_text()
+        return jsonify({"script": script})
+    
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
