@@ -306,7 +306,7 @@ async function saveConfig() {
     saveToLocalStorage();
     
     try {
-        const response = await fetch(`${API_BASE}/config`, {
+        const response = await fetch(`${AGENT_URL}/agent/config`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ config })
