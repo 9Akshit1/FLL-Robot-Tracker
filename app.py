@@ -280,6 +280,9 @@ def pull_csv():
         LOCAL_CSV_PATH.write_text(csv_content)
         csv_size = result.get("csv_size", len(csv_content))
         
+        print(f"[PULL] CSV saved to: {LOCAL_CSV_PATH.absolute()}")
+        print(f"[PULL] Saved size: {len(csv_content)} bytes")
+        
         # Get headers
         headers = csv_content.split('\n')[0].split(',') if csv_content else []
         
@@ -305,6 +308,11 @@ def analyze():
     """Analyze movement with dynamic config"""
     try:
         print("[ANALYZE] Starting analysis...")
+        print(f"[ANALYZE] Checking CSV at: {LOCAL_CSV_PATH}")
+        print(f"[ANALYZE] Absolute path: {LOCAL_CSV_PATH.absolute()}")
+        print(f"[ANALYZE] Exists: {LOCAL_CSV_PATH.exists()}")
+        if LOCAL_CSV_PATH.exists():
+            print(f"[ANALYZE] File size: {LOCAL_CSV_PATH.stat().st_size} bytes")
         
         if not LOCAL_CSV_PATH.exists():
             print("[ANALYZE] CSV file not found")
