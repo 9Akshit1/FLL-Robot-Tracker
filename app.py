@@ -543,6 +543,18 @@ def agent_status():
             "agent_url": AGENT_URL
         })
 
+@app.route("/debug_files")
+def debug_files():
+    """Debug endpoint to list files"""
+    try:
+        base_dir = Path(__file__).parent
+        files = []
+        for item in base_dir.iterdir():
+            files.append(str(item))
+        return jsonify({"base_dir": str(base_dir), "files": files})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ============================================================
 # MAIN
 # ============================================================
