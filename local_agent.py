@@ -436,7 +436,7 @@ def agent_upload():
     
     Expects JSON:
         {
-            "script_content": "import runloop\n...",
+            "script": "import runloop\n...",
             "com_port": "COM3"
         }
     """
@@ -444,10 +444,10 @@ def agent_upload():
     
     try:
         data = request.get_json()
-        if not data or not data.get("script_content"):
-            return jsonify({"error": "script_content required"}), 400
+        if not data or not data.get("script"):
+            return jsonify({"error": "script required"}), 400
         
-        script_content = data["script_content"]
+        script_content = data["script"]
         selected_port = data.get("com_port", COM_PORT)
         script_path = AGENT_DATA_DIR / "replay.py"
         script_path.write_text(script_content)
