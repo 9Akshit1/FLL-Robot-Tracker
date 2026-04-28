@@ -363,7 +363,7 @@ if (connectBtn) {
         addTerminal("[*] Uploading code...");
         
         try {
-            const response = await fetch(`${API_BASE}/connect`);
+            const response = await fetch(`${AGENT_URL}/agent/connect`);
             const data = await response.json();
             if (response.ok) {
                 addTerminal("[✓] Recording complete");
@@ -386,7 +386,7 @@ if (pullBtn) {
         addTerminal("\n[*] Pulling CSV...");
         
         try {
-            const response = await fetch(`${API_BASE}/pull_csv`);
+            const response = awafetch(`${AGENT_URL}/agent/pull`);
             const data = await response.json();
             if (response.ok) {
                 addTerminal(`[✓] CSV pulled (${data.csv_size} bytes)`);
@@ -459,7 +459,7 @@ if (uploadBtn) {
         addTerminal("\n[*] Uploading script...");
         
         try {
-            const response = await fetch(`${API_BASE}/upload_script`);
+            const response = awafetch(`${AGENT_URL}/agent/upload_script`);
             const data = await response.json();
             if (response.ok) {
                 addTerminal(data.output);
@@ -483,7 +483,7 @@ if (runBtn) {
         addTerminal("[*] Watch your robot!");
         
         try {
-            const response = await fetch(`${API_BASE}/run_script`);
+            const response = awafetch(`${AGENT_URL}/agent/run`);
             const data = await response.json();
             if (response.ok) {
                 addTerminal(data.output);
