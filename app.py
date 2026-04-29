@@ -277,11 +277,23 @@ def pull_csv():
             }), 500
         
         LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-        LOCAL_CSV_PATH.write_text(csv_content)
+        
+        # Write with explicit flush
+        with open(LOCAL_CSV_PATH, 'w') as f:
+            f.write(csv_content)
+            f.flush()
+            os.fsync(f.fileno())
+        
         csv_size = result.get("csv_size", len(csv_content))
         
         print(f"[PULL] CSV saved to: {LOCAL_CSV_PATH.absolute()}")
         print(f"[PULL] Saved size: {len(csv_content)} bytes")
+        
+        # Verify the file was written
+        actual_size = LOCAL_CSV_PATH.stat().st_size
+        actual_content = LOCAL_CSV_PATH.read_text()[:100]
+        print(f"[PULL] VERIFY - Actual file size: {actual_size} bytes")
+        print(f"[PULL] VERIFY - Actual content start: {repr(actual_content)}")
         
         # Get headers
         headers = csv_content.split('\n')[0].split(',') if csv_content else []
@@ -324,6 +336,11 @@ def analyze():
                 "output": "✗ No CSV file. Pull data first."
             }), 400
         
+        # Force re-read the file to avoid caching issues
+        csv_data = LOCAL_CSV_PATH.read_text()
+        actual_size = LOCAL_CSV_PATH.stat().st_size
+        print(f"[ANALYZE] Re-read CSV: size={actual_size}, content_start={repr(csv_data[:100])}")
+        
         from backend.movement_analysis import run
         output = run(str(LOCAL_CSV_PATH), config=current_config)
         
@@ -333,6 +350,7 @@ def analyze():
             result_text += f"[{s['start']:.0f} - {s['end']:.0f}] {s['type']:20} Speed: {s['avg_speed']:6.2f} deg/s Duration: {s['duration']:.2f}s\n"
         
         print(f"[ANALYZE] Analysis complete - {len(output)} segments detected")
+        print(f"[ANALYZE] Segments: {output}")
         return jsonify({
             "status": "Success",
             "message": "Analysis complete",
@@ -377,6 +395,12 @@ def convert():
         from backend.convert_to_code import generate_spike_script
         
         output_path = DATA_DIR / "replay.py"
+        print(f"[CONVERT] Generating from CSV: {LOCAL_CSV_PATH}")
+        print(f"[CONVERT] CSV exists: {LOCAL_CSV_PATH.exists()}")
+        if LOCAL_CSV_PATH.exists():
+            csv_content = LOCAL_CSV_PATH.read_text()
+            print(f"[CONVERT] CSV size: {len(csv_content)} bytes, content_start: {repr(csv_content[:100])}")
+        
         generate_spike_script(str(LOCAL_CSV_PATH), str(output_path), config=current_config)
         
         if output_path.exists():
