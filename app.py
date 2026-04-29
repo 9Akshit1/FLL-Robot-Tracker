@@ -240,6 +240,37 @@ def connect():
             "output": f"✗ Error: {e}"
         }), 500
 
+@app.route("/save_csv", methods=["POST"])
+def save_csv():
+    """Save CSV content pulled from agent"""
+    try:
+        data = request.get_json()
+        csv_content = data.get("csv_content", "")
+        
+        if not csv_content:
+            return jsonify({"error": "No CSV content"}), 400
+        
+        LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Write with explicit flush and sync
+        with open(LOCAL_CSV_PATH, 'w') as f:
+            f.write(csv_content)
+            f.flush()
+            os.fsync(f.fileno())
+        
+        actual_size = LOCAL_CSV_PATH.stat().st_size
+        print(f"[SAVE_CSV] Saved CSV: {actual_size} bytes to {LOCAL_CSV_PATH}")
+        
+        return jsonify({
+            "status": "success",
+            "size": actual_size,
+            "message": "CSV saved"
+        })
+    
+    except Exception as e:
+        print(f"[SAVE_CSV] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/pull_csv")
 def pull_csv():
     """

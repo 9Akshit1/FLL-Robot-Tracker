@@ -408,18 +408,35 @@ if (pullBtn) {
         addTerminal("\n[*] Pulling CSV...");
 
         try {
+            // Step 1: Pull from local agent
             const response = await fetch(`${AGENT_URL}/agent/pull`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ com_port: comPortSelected })
             });
             const data = await response.json();
-            if (response.ok) {
-                addTerminal(`[✓] CSV pulled (${data.csv_size} bytes)`);
+            if (!response.ok) {
+                addTerminal(`[✗] ${data.message}`);
+                pullBtn.disabled = false;
+                return;
+            }
+            
+            addTerminal(`[✓] CSV pulled from agent (${data.csv_size} bytes)`);
+            
+            // Step 2: Save CSV to PythonAnywhere server
+            addTerminal("[*] Saving to server...");
+            const saveRes = await fetch(`${API_BASE}/save_csv`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ csv_content: data.csv_content })
+            });
+            const saveData = await saveRes.json();
+            if (saveRes.ok) {
+                addTerminal(`[✓] Saved to server`);
                 if (analyzeBtn) analyzeBtn.disabled = false;
                 statusBox.textContent = "Data ready. Click 'Analyze' to proceed.";
             } else {
-                addTerminal(`[✗] ${data.message}`);
+                addTerminal(`[✗] Save failed: ${saveData.message}`);
                 pullBtn.disabled = false;
             }
         } catch (e) {
