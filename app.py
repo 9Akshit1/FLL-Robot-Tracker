@@ -339,7 +339,10 @@ def analyze():
         # Force re-read the file to avoid caching issues
         csv_data = LOCAL_CSV_PATH.read_text()
         actual_size = LOCAL_CSV_PATH.stat().st_size
-        print(f"[ANALYZE] Re-read CSV: size={actual_size}, content_start={repr(csv_data[:100])}")
+        lines = csv_data.split('\n')
+        print(f"[ANALYZE] Re-read CSV: size={actual_size}, lines={len(lines)}")
+        print(f"[ANALYZE] Content preview: {repr(csv_data[:200])}")
+        print(f"[ANALYZE] Last line: {repr(lines[-2] if len(lines) > 1 else 'NO DATA')}")
         
         # CRITICAL: Clear any Python module cache for movement_analysis
         import sys
