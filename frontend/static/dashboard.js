@@ -1,4 +1,5 @@
 // frontend/static/dashboard.js
+// FIXED: Pull button now sends CSV to server /pull endpoint
 
 const API_BASE = window.location.origin; 
 const AGENT_URL = "http://localhost:5001";
@@ -222,113 +223,107 @@ async function detectPorts() {
         console.log("[PORTS] Found ports:", ports);
         
         if (ports.length > 0) {
-            comPort.innerHTML = '<option value="">-- Select Port --</option>';
+            portStatus.textContent = `✓ Found ${ports.length} port(s)`;
             
-            ports.forEach(portInfo => {
+            // Clear existing options
+            comPort.innerHTML = "";
+            
+            // Add ports to dropdown
+            ports.forEach(port => {
                 const option = document.createElement("option");
-                option.value = portInfo.port;
-                option.textContent = `${portInfo.port} - ${portInfo.description || "Serial Port"}`;
+                option.value = port.port;
+                option.textContent = `${port.port} - ${port.description}`;
                 comPort.appendChild(option);
             });
             
-            portStatus.textContent = `✓ Found ${ports.length} port(s). Select one above.`;
-            comPort.disabled = false;
+            // Select first port
+            if (ports.length > 0) {
+                comPort.value = ports[0].port;
+                comPortSelected = ports[0].port;
+                saveToLocalStorage();
+                console.log(`[PORTS] Selected port: ${comPortSelected}`);
+            }
         } else {
-            console.log("[PORTS] No ports found");
-            portStatus.textContent = "✗ No ports found. Connect a device via USB and try again.";
-            comPort.innerHTML = '<option value="">No ports available</option>';
-            comPort.disabled = true;
+            portStatus.textContent = "✗ No ports found. Connect robot via USB.";
         }
     } catch (e) {
-        console.log("[PORTS] Exception:", e);
-        portStatus.textContent = `✗ ${e.message}`;
+        console.error("[PORTS] Error:", e);
+        portStatus.textContent = `✗ Error: ${e.message}`;
+    } finally {
+        detectPortsBtn.disabled = false;
     }
-    detectPortsBtn.disabled = false;
 }
-
-if (comPort) comPort.addEventListener("change", () => {
-    comPortSelected = comPort.value;
-    saveToLocalStorage();
-    if (comPortSelected) {
-        portStatus.textContent = `✓ Port ${comPortSelected} selected`;
-    }
-});
-
-if (detectPortsBtn) detectPortsBtn.addEventListener("click", detectPorts);
 
 // ============================================================
 // CONFIG MANAGEMENT
 // ============================================================
 
 function buildConfigObject() {
-    const config = {
-        com_port: comPortSelected,
-        motors: {},
-        sensors: {}
-    };
+    const motors = {};
+    const sensors = {};
     
     PORT_LABELS.forEach(port => {
         const select = document.getElementById(`port${port}`);
         if (!select) return;
-        const value = select.value;
         
+        const value = select.value;
         if (value === "motor") {
-            config.motors[port] = true;
+            motors[port] = true;
         } else if (value === "distance_sensor") {
-            config.sensors.distance = port;
+            sensors["distance"] = port;
         } else if (value === "force_sensor") {
-            config.sensors.force = port;
-        } 
+            sensors["force"] = port;
+        }
     });
     
-    return config;
+    return {
+        com_port: comPortSelected || "COM3",
+        motors,
+        sensors
+    };
 }
 
-async function saveConfig() {
-    if (!comPortSelected) {
-        portStatus.textContent = "✗ Please select a COM port first";
-        return;
-    }
-    
-    const config = buildConfigObject();
-    
-    if (Object.keys(config.motors).length === 0) {
-        configStatus.textContent = "✗ Please select at least one motor";
-        return;
-    }
-    
-    saveConfigBtn.disabled = true;
-    configStatus.textContent = "[*] Saving configuration...";
-    saveToLocalStorage();
-    
-    try {
-        const response = await fetch(`${AGENT_URL}/agent/config`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ config })
-        });
+if (detectPortsBtn) {
+    detectPortsBtn.addEventListener("click", detectPorts);
+}
+
+if (comPort) {
+    comPort.addEventListener("change", (e) => {
+        comPortSelected = e.target.value;
+        console.log(`[CONFIG] Port selected: ${comPortSelected}`);
+        saveToLocalStorage();
+    });
+}
+
+if (saveConfigBtn) {
+    saveConfigBtn.addEventListener("click", async () => {
+        saveConfigBtn.disabled = true;
+        const config = buildConfigObject();
         
-        if (response.ok) {
-            currentConfig = config;
-            configStatus.textContent = "✓ Configuration saved";
-            statusBox.textContent = "Configuration ready. Click 'Connect & Record' to begin.";
-            connectBtn.disabled = false;
-            addTerminal("[✓] Config saved and synced");
-        } else {
+        try {
+            const response = await fetch(`${API_BASE}/config`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ config })
+            });
+            
             const data = await response.json();
-            configStatus.textContent = `✗ ${data.message}`;
+            if (response.ok) {
+                configStatus.textContent = "✓ Config saved";
+                saveToLocalStorage();
+            } else {
+                configStatus.textContent = `✗ ${data.message}`;
+            }
+        } catch (e) {
+            configStatus.textContent = `✗ Error: ${e.message}`;
+        } finally {
+            saveConfigBtn.disabled = false;
         }
-    } catch (e) {
-        configStatus.textContent = `✗ ${e.message}`;
-    } finally {
-        saveConfigBtn.disabled = false;
-    }
+    });
 }
-
-if (saveConfigBtn) saveConfigBtn.addEventListener("click", saveConfig);
 
 // ============================================================
-// TERMINAL
+// TERMINAL OUTPUT
 // ============================================================
 
 function addTerminal(text) {
@@ -408,20 +403,48 @@ if (pullBtn) {
         addTerminal("\n[*] Pulling CSV...");
 
         try {
+            // ===== CRITICAL FIX #1 =====
+            // Step 1: Get CSV from local agent
+            console.log("[PULL] Pulling from agent...");
             const response = await fetch(`${AGENT_URL}/agent/pull`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ com_port: comPortSelected })
             });
             const data = await response.json();
-            if (response.ok) {
-                addTerminal(`[✓] CSV pulled (${data.csv_size} bytes)`);
-                if (analyzeBtn) analyzeBtn.disabled = false;
-                statusBox.textContent = "Data ready. Click 'Analyze' to proceed.";
-            } else {
-                addTerminal(`[✗] ${data.message}`);
+            
+            if (!response.ok) {
+                addTerminal(`[✗] ${data.error || data.message}`);
                 pullBtn.disabled = false;
+                return;
             }
+            
+            addTerminal(`[✓] CSV pulled (${data.csv_size} bytes)`);
+            console.log("[PULL] CSV retrieved from agent, saving to server...");
+            
+            // ===== CRITICAL FIX #2 =====
+            // Step 2: SAVE CSV to server disk
+            console.log("[PULL] Sending CSV to server /pull endpoint...");
+            const saveResponse = await fetch(`${API_BASE}/pull`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    csv_content: data.csv_content 
+                })
+            });
+            
+            const saveData = await saveResponse.json();
+            if (!saveResponse.ok) {
+                addTerminal(`[✗] Failed to save CSV: ${saveData.message}`);
+                pullBtn.disabled = false;
+                return;
+            }
+            
+            addTerminal(`[✓] CSV saved to server (${saveData.csv_size} bytes)`);
+            console.log("[PULL] CSV successfully saved to server!");
+            
+            if (analyzeBtn) analyzeBtn.disabled = false;
+            statusBox.textContent = "Data ready. Click 'Analyze' to proceed.";
         } catch (e) {
             addTerminal(`[✗] ${e.message}`);
             pullBtn.disabled = false;
@@ -492,15 +515,18 @@ if (uploadBtn) {
             const response = await fetch(`${AGENT_URL}/agent/upload`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ script: scriptData.script, com_port: comPortSelected })
+                body: JSON.stringify({ 
+                    script_content: scriptData.script,
+                    com_port: comPortSelected 
+                })
             });
             const data = await response.json();
             if (response.ok) {
-                addTerminal(data.output);
+                addTerminal("[✓] Script uploaded to robot");
                 if (runBtn) runBtn.disabled = false;
                 statusBox.textContent = "Script uploaded. Click 'Run' to execute.";
             } else {
-                addTerminal(`[✗] ${data.message}`);
+                addTerminal(`[✗] ${data.message || data.error}`);
                 uploadBtn.disabled = false;
             }
         } catch (e) {
@@ -528,7 +554,7 @@ if (runBtn) {
                 addTerminal("[✓] Done");
                 statusBox.textContent = "Complete!";
             } else {
-                addTerminal(`[✗] ${data.message}`);
+                addTerminal(`[✗] ${data.message || data.error}`);
                 runBtn.disabled = false;
             }
         } catch (e) {
