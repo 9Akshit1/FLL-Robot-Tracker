@@ -492,7 +492,7 @@ if (uploadBtn) {
             const response = await fetch(`${AGENT_URL}/agent/upload`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ script: scriptData.script })
+                body: JSON.stringify({ script: scriptData.script, com_port: comPortSelected })
             });
             const data = await response.json();
             if (response.ok) {
