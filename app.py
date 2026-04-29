@@ -341,8 +341,20 @@ def analyze():
         actual_size = LOCAL_CSV_PATH.stat().st_size
         print(f"[ANALYZE] Re-read CSV: size={actual_size}, content_start={repr(csv_data[:100])}")
         
-        from backend.movement_analysis import run
+        # CRITICAL: Clear any Python module cache for movement_analysis
+        import sys
+        if 'backend.movement_analysis' in sys.modules:
+            print("[ANALYZE] WARNING: Clearing module cache - reloading movement_analysis")
+            import importlib
+            import backend.movement_analysis
+            importlib.reload(backend.movement_analysis)
+            from backend.movement_analysis import run
+        else:
+            from backend.movement_analysis import run
+        
+        print(f"[ANALYZE] Calling movement_analysis.run with: {LOCAL_CSV_PATH}")
         output = run(str(LOCAL_CSV_PATH), config=current_config)
+        print(f"[ANALYZE] Got {len(output)} segments")
         
         # Format output
         result_text = "✓ Analysis complete\n\nDetected Segments:\n"
@@ -588,6 +600,34 @@ def get_generated_script():
         script = GENERATED_SCRIPT_PATH.read_text()
         return jsonify({"script": script})
     
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/debug_csv_full")
+def debug_csv_full():
+    """Full debug of CSV file"""
+    try:
+        if not LOCAL_CSV_PATH.exists():
+            return jsonify({"error": "CSV file does not exist", "path": str(LOCAL_CSV_PATH)})
+        
+        content = LOCAL_CSV_PATH.read_text()
+        lines = content.split('\n')
+        
+        # Extract first motor column data to see actual movement
+        motor_data = []
+        if len(lines) > 1:
+            for i, line in enumerate(lines[1:11]):  # First 10 data rows
+                if line:
+                    motor_data.append(line.split(',')[0:4])  # Time and first motor
+        
+        return jsonify({
+            "path": str(LOCAL_CSV_PATH),
+            "file_size": LOCAL_CSV_PATH.stat().st_size,
+            "total_lines": len(lines),
+            "header": lines[0] if lines else "NO HEADER",
+            "first_10_rows": motor_data,
+            "full_content_length": len(content)
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
