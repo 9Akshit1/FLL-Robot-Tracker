@@ -440,7 +440,7 @@ if (pullBtn) {
                 pullBtn.disabled = false;
             }
         } catch (e) {
-            addTerminal(`[✗] ${e.message}`);
+            addTerminal(`[X] ${e.message}`);
             pullBtn.disabled = false;
         }
     });
