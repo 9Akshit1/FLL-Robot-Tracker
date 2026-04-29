@@ -222,41 +222,39 @@ async function detectPorts() {
         console.log("[PORTS] Found ports:", ports);
         
         if (ports.length > 0) {
-            // Clear existing options
-            comPort.innerHTML = "";
+            comPort.innerHTML = '<option value="">-- Select Port --</option>';
             
-            ports.forEach(port => {
+            ports.forEach(portInfo => {
                 const option = document.createElement("option");
-                option.value = port.port;
-                option.textContent = `${port.port} - ${port.description}`;
+                option.value = portInfo.port;
+                option.textContent = `${portInfo.port} - ${portInfo.description || "Serial Port"}`;
                 comPort.appendChild(option);
             });
             
-            // Select the first port
-            comPort.value = ports[0].port;
-            comPortSelected = ports[0].port;
-            
-            portStatus.textContent = `✓ Found ${ports.length} port(s). Selected: ${comPortSelected}`;
-            
-            // Save to localStorage
-            saveToLocalStorage();
-            
-            // Enable connect button
-            if (connectBtn) connectBtn.disabled = false;
+            portStatus.textContent = `✓ Found ${ports.length} port(s). Select one above.`;
+            comPort.disabled = false;
         } else {
-            portStatus.textContent = "✗ No ports found. Is the robot plugged in?";
+            console.log("[PORTS] No ports found");
+            portStatus.textContent = "✗ No ports found. Connect a device via USB and try again.";
+            comPort.innerHTML = '<option value="">No ports available</option>';
+            comPort.disabled = true;
         }
     } catch (e) {
-        console.error("[PORTS] Exception:", e);
-        portStatus.textContent = `✗ Error: ${e.message}`;
-    } finally {
-        detectPortsBtn.disabled = false;
+        console.log("[PORTS] Exception:", e);
+        portStatus.textContent = `✗ ${e.message}`;
     }
+    detectPortsBtn.disabled = false;
 }
 
-if (detectPortsBtn) {
-    detectPortsBtn.addEventListener("click", detectPorts);
-}
+if (comPort) comPort.addEventListener("change", () => {
+    comPortSelected = comPort.value;
+    saveToLocalStorage();
+    if (comPortSelected) {
+        portStatus.textContent = `✓ Port ${comPortSelected} selected`;
+    }
+});
+
+if (detectPortsBtn) detectPortsBtn.addEventListener("click", detectPorts);
 
 // ============================================================
 // CONFIG MANAGEMENT
@@ -264,7 +262,7 @@ if (detectPortsBtn) {
 
 function buildConfigObject() {
     const config = {
-        com_port: comPortSelected || "COM3",
+        com_port: comPortSelected,
         motors: {},
         sensors: {}
     };
@@ -272,54 +270,62 @@ function buildConfigObject() {
     PORT_LABELS.forEach(port => {
         const select = document.getElementById(`port${port}`);
         if (!select) return;
-        
         const value = select.value;
+        
         if (value === "motor") {
             config.motors[port] = true;
         } else if (value === "distance_sensor") {
             config.sensors.distance = port;
         } else if (value === "force_sensor") {
             config.sensors.force = port;
-        }
+        } 
     });
     
     return config;
 }
 
-if (comPort) {
-    comPort.addEventListener("change", (e) => {
-        comPortSelected = e.target.value;
-        console.log("[PORT] Selected port:", comPortSelected);
-        saveToLocalStorage();
-    });
+async function saveConfig() {
+    if (!comPortSelected) {
+        portStatus.textContent = "✗ Please select a COM port first";
+        return;
+    }
+    
+    const config = buildConfigObject();
+    
+    if (Object.keys(config.motors).length === 0) {
+        configStatus.textContent = "✗ Please select at least one motor";
+        return;
+    }
+    
+    saveConfigBtn.disabled = true;
+    configStatus.textContent = "[*] Saving configuration...";
+    saveToLocalStorage();
+    
+    try {
+        const response = await fetch(`${AGENT_URL}/agent/config`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config })
+        });
+        
+        if (response.ok) {
+            currentConfig = config;
+            configStatus.textContent = "✓ Configuration saved";
+            statusBox.textContent = "Configuration ready. Click 'Connect & Record' to begin.";
+            connectBtn.disabled = false;
+            addTerminal("[✓] Config saved and synced");
+        } else {
+            const data = await response.json();
+            configStatus.textContent = `✗ ${data.message}`;
+        }
+    } catch (e) {
+        configStatus.textContent = `✗ ${e.message}`;
+    } finally {
+        saveConfigBtn.disabled = false;
+    }
 }
 
-if (saveConfigBtn) {
-    saveConfigBtn.addEventListener("click", async () => {
-        const config = buildConfigObject();
-        console.log("[CONFIG] Saving config:", config);
-        
-        try {
-            const response = await fetch(`${API_BASE}/config`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ config })
-            });
-            
-            const data = await response.json();
-            if (response.ok) {
-                addTerminal("[✓] Config saved to cloud and robot");
-                configStatus.textContent = "✓ Config saved";
-            } else {
-                addTerminal(`[✗] Failed to save config: ${data.message}`);
-                configStatus.textContent = `✗ ${data.message}`;
-            }
-        } catch (e) {
-            addTerminal(`[✗] Error: ${e.message}`);
-            configStatus.textContent = `✗ ${e.message}`;
-        }
-    });
-}
+if (saveConfigBtn) saveConfigBtn.addEventListener("click", saveConfig);
 
 // ============================================================
 // TERMINAL
@@ -410,38 +416,7 @@ if (pullBtn) {
             const data = await response.json();
             if (response.ok) {
                 addTerminal(`[✓] CSV pulled (${data.csv_size} bytes)`);
-                
-                // ============================================================
-                // CRITICAL FIX: Send CSV to cloud server after pull
-                // ============================================================
                 if (analyzeBtn) analyzeBtn.disabled = false;
-                
-                try {
-                    console.log("[PULL] Sending CSV to cloud server...");
-                    addTerminal("[*] Saving CSV to cloud server...");
-                    
-                    const saveRes = await fetch(`${API_BASE}/save_csv`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            csv_content: data.csv_content
-                        })
-                    });
-                    
-                    if (saveRes.ok) {
-                        const saveData = await saveRes.json();
-                        console.log("[PULL] CSV saved to cloud server");
-                        addTerminal(`[✓] CSV saved to cloud (${saveData.csv_size} bytes)`);
-                    } else {
-                        console.warn("[PULL] Failed to save CSV to cloud:", saveRes.status);
-                        addTerminal("[⚠] Warning: Failed to save CSV to cloud, continuing anyway...");
-                    }
-                } catch (e) {
-                    console.warn("[PULL] Error saving CSV to cloud:", e.message);
-                    addTerminal(`[⚠] Warning: ${e.message}`);
-                    // Continue anyway - analysis might still work
-                }
-                
                 statusBox.textContent = "Data ready. Click 'Analyze' to proceed.";
             } else {
                 addTerminal(`[✗] ${data.message}`);

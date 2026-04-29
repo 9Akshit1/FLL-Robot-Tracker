@@ -240,48 +240,103 @@ def connect():
             "output": f"✗ Error: {e}"
         }), 500
 
+@app.route("/pull_csv")
+def pull_csv():
+    """
+    Pull CSV from robot via local agent
+    """
+    try:
+        print("[PULL] Requesting CSV pull from agent...")
+        
+        # Get the COM port the user selected
+        selected_port = current_config.get("com_port", "COM3")
+        print(f"[PULL] Using port: {selected_port}")
+        
+        result = call_agent(
+            "/agent/pull",
+            method="POST",
+            data={"com_port": selected_port}
+        )
+        
+        if "error" in result:
+            print(f"[PULL] Agent error: {result['error']}")
+            return jsonify({
+                "status": "Error",
+                "message": result["error"],
+                "output": f"✗ Error: {result['error']}"
+            }), 500
+        
+        # Save CSV locally for analysis
+        csv_content = result.get("csv_content", "")
+        if not csv_content:
+            print("[PULL] Empty CSV received")
+            return jsonify({
+                "status": "Error",
+                "message": "Empty CSV",
+                "output": "✗ CSV is empty"
+            }), 500
+        
+        LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+        LOCAL_CSV_PATH.write_text(csv_content)
+        csv_size = result.get("csv_size", len(csv_content))
+        
+        print(f"[PULL] CSV saved to: {LOCAL_CSV_PATH.absolute()}")
+        print(f"[PULL] Saved size: {len(csv_content)} bytes")
+        
+        # Get headers
+        headers = csv_content.split('\n')[0].split(',') if csv_content else []
+        
+        print(f"[PULL] CSV received ({csv_size} bytes)")
+        return jsonify({
+            "status": "Success",
+            "csv_size": csv_size,
+            "message": "Pulled from robot",
+            "output": f"✓ CSV pulled\n✓ Size: {csv_size} bytes\n✓ Headers: {len(headers)} columns",
+            "headers": headers
+        })
+    
+    except Exception as e:
+        print(f"[PULL] Exception: {e}")
+        return jsonify({
+            "status": "Error",
+            "message": str(e),
+            "output": f"✗ Error: {e}"
+        }), 500
+
 @app.route("/analyze")
 def analyze():
-    """Analyze movement from CSV"""
+    """Analyze movement with dynamic config"""
     try:
-        print("[ANALYZE] Starting movement analysis...")
+        print("[ANALYZE] Starting analysis...")
+        print(f"[ANALYZE] Checking CSV at: {LOCAL_CSV_PATH}")
+        print(f"[ANALYZE] Absolute path: {LOCAL_CSV_PATH.absolute()}")
+        print(f"[ANALYZE] Exists: {LOCAL_CSV_PATH.exists()}")
+        if LOCAL_CSV_PATH.exists():
+            print(f"[ANALYZE] File size: {LOCAL_CSV_PATH.stat().st_size} bytes")
+            content = LOCAL_CSV_PATH.read_text()[:300]
+            print(f"[ANALYZE] Content preview: {repr(content[:100])}")
         
         if not LOCAL_CSV_PATH.exists():
-            print("[ANALYZE] CSV not found")
+            print("[ANALYZE] CSV file not found")
             return jsonify({
                 "status": "Error",
                 "message": "No CSV",
-                "output": "✗ No CSV file"
+                "output": "✗ No CSV file. Pull data first."
             }), 400
         
-        csv_size = LOCAL_CSV_PATH.stat().st_size
-        print(f"[ANALYZE] CSV exists ({csv_size} bytes)")
-        
         from backend.movement_analysis import run
-        segments_list = run(str(LOCAL_CSV_PATH), config=current_config)
+        output = run(str(LOCAL_CSV_PATH), config=current_config)
         
-        output = "✓ Analysis complete\n\nDetected Segments:\n"
-        for segment in segments_list:
-            start = segment['start']
-            end = segment['end']
-            seg_type = segment['type']
-            speed = segment.get('avg_speed', 0)
-            duration = segment.get('duration', 0)
-            
-            output += f"[{start} - {end}] {seg_type:<20} Speed: {speed:>8.2f} deg/s Duration: {duration:.2f}s\n"
+        # Format output
+        result_text = "✓ Analysis complete\n\nDetected Segments:\n"
+        for s in output:
+            result_text += f"[{s['start']:.0f} - {s['end']:.0f}] {s['type']:20} Speed: {s['avg_speed']:6.2f} deg/s Duration: {s['duration']:.2f}s\n"
         
-        print(f"[ANALYZE] Analysis complete with {len(segments_list)} segments")
-        
-        # Also save segments for visualization
-        segments_list_simple = [[s['start'], s['end'], s['type']] for s in segments_list]
-        with open(SEGMENTS_PATH, 'w') as f:
-            json.dump(segments_list_simple, f)
-        
+        print(f"[ANALYZE] Analysis complete - {len(output)} segments detected")
         return jsonify({
             "status": "Success",
             "message": "Analysis complete",
-            "output": output,
-            "segments": segments_list_simple
+            "output": result_text
         })
     
     except Exception as e:
@@ -352,60 +407,6 @@ def convert():
             "message": str(e),
             "output": f"✗ Error: {e}",
             "script_content": ""
-        }), 500
-
-# ============================================================
-# CSV DATA TRANSFER FROM LOCAL AGENT TO CLOUD
-# ============================================================
-
-@app.route("/save_csv", methods=["POST"])
-def save_csv():
-    """
-    Receive CSV data from local agent's pull operation
-    Save it to LOCAL_CSV_PATH for analysis and code generation
-    
-    This is the CRITICAL FIX for the caching issue!
-    
-    Flow:
-    1. Dashboard pulls CSV from robot via local_agent
-    2. Local agent returns CSV content
-    3. Dashboard sends CSV to this endpoint
-    4. Cloud server saves it to LOCAL_CSV_PATH
-    5. Subsequent analyze/convert operations use FRESH data
-    """
-    try:
-        print("[CSV] Receiving CSV data from agent...")
-        
-        data = request.get_json()
-        if not data or "csv_content" not in data:
-            print("[CSV] Error: No CSV content in request")
-            return jsonify({
-                "status": "Error", 
-                "message": "No CSV content provided"
-            }), 400
-        
-        csv_content = data["csv_content"]
-        
-        # Ensure directory exists
-        LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Save the CSV
-        LOCAL_CSV_PATH.write_text(csv_content, encoding='utf-8')
-        csv_size = LOCAL_CSV_PATH.stat().st_size
-        
-        print(f"[CSV] ✓ CSV saved to {LOCAL_CSV_PATH} ({csv_size} bytes)")
-        
-        return jsonify({
-            "status": "Success",
-            "message": f"CSV saved ({csv_size} bytes)",
-            "csv_size": csv_size
-        })
-    
-    except Exception as e:
-        print(f"[CSV] Error saving CSV: {e}")
-        return jsonify({
-            "status": "Error",
-            "message": str(e)
         }), 500
 
 @app.route("/upload_script")
