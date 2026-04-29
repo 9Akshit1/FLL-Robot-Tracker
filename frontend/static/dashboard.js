@@ -1,5 +1,4 @@
 // frontend/static/dashboard.js
-// FIXED: Pull button now sends CSV to server /pull endpoint
 
 const API_BASE = window.location.origin; 
 const AGENT_URL = "http://localhost:5001";
@@ -223,12 +222,9 @@ async function detectPorts() {
         console.log("[PORTS] Found ports:", ports);
         
         if (ports.length > 0) {
-            portStatus.textContent = `✓ Found ${ports.length} port(s)`;
-            
             // Clear existing options
             comPort.innerHTML = "";
             
-            // Add ports to dropdown
             ports.forEach(port => {
                 const option = document.createElement("option");
                 option.value = port.port;
@@ -236,22 +232,30 @@ async function detectPorts() {
                 comPort.appendChild(option);
             });
             
-            // Select first port
-            if (ports.length > 0) {
-                comPort.value = ports[0].port;
-                comPortSelected = ports[0].port;
-                saveToLocalStorage();
-                console.log(`[PORTS] Selected port: ${comPortSelected}`);
-            }
+            // Select the first port
+            comPort.value = ports[0].port;
+            comPortSelected = ports[0].port;
+            
+            portStatus.textContent = `✓ Found ${ports.length} port(s). Selected: ${comPortSelected}`;
+            
+            // Save to localStorage
+            saveToLocalStorage();
+            
+            // Enable connect button
+            if (connectBtn) connectBtn.disabled = false;
         } else {
-            portStatus.textContent = "✗ No ports found. Connect robot via USB.";
+            portStatus.textContent = "✗ No ports found. Is the robot plugged in?";
         }
     } catch (e) {
-        console.error("[PORTS] Error:", e);
+        console.error("[PORTS] Exception:", e);
         portStatus.textContent = `✗ Error: ${e.message}`;
     } finally {
         detectPortsBtn.disabled = false;
     }
+}
+
+if (detectPortsBtn) {
+    detectPortsBtn.addEventListener("click", detectPorts);
 }
 
 // ============================================================
@@ -259,8 +263,11 @@ async function detectPorts() {
 // ============================================================
 
 function buildConfigObject() {
-    const motors = {};
-    const sensors = {};
+    const config = {
+        com_port: comPortSelected || "COM3",
+        motors: {},
+        sensors: {}
+    };
     
     PORT_LABELS.forEach(port => {
         const select = document.getElementById(`port${port}`);
@@ -268,37 +275,29 @@ function buildConfigObject() {
         
         const value = select.value;
         if (value === "motor") {
-            motors[port] = true;
+            config.motors[port] = true;
         } else if (value === "distance_sensor") {
-            sensors["distance"] = port;
+            config.sensors.distance = port;
         } else if (value === "force_sensor") {
-            sensors["force"] = port;
+            config.sensors.force = port;
         }
     });
     
-    return {
-        com_port: comPortSelected || "COM3",
-        motors,
-        sensors
-    };
-}
-
-if (detectPortsBtn) {
-    detectPortsBtn.addEventListener("click", detectPorts);
+    return config;
 }
 
 if (comPort) {
     comPort.addEventListener("change", (e) => {
         comPortSelected = e.target.value;
-        console.log(`[CONFIG] Port selected: ${comPortSelected}`);
+        console.log("[PORT] Selected port:", comPortSelected);
         saveToLocalStorage();
     });
 }
 
 if (saveConfigBtn) {
     saveConfigBtn.addEventListener("click", async () => {
-        saveConfigBtn.disabled = true;
         const config = buildConfigObject();
+        console.log("[CONFIG] Saving config:", config);
         
         try {
             const response = await fetch(`${API_BASE}/config`, {
@@ -309,21 +308,21 @@ if (saveConfigBtn) {
             
             const data = await response.json();
             if (response.ok) {
+                addTerminal("[✓] Config saved to cloud and robot");
                 configStatus.textContent = "✓ Config saved";
-                saveToLocalStorage();
             } else {
+                addTerminal(`[✗] Failed to save config: ${data.message}`);
                 configStatus.textContent = `✗ ${data.message}`;
             }
         } catch (e) {
-            configStatus.textContent = `✗ Error: ${e.message}`;
-        } finally {
-            saveConfigBtn.disabled = false;
+            addTerminal(`[✗] Error: ${e.message}`);
+            configStatus.textContent = `✗ ${e.message}`;
         }
     });
 }
 
 // ============================================================
-// TERMINAL OUTPUT
+// TERMINAL
 // ============================================================
 
 function addTerminal(text) {
@@ -403,48 +402,51 @@ if (pullBtn) {
         addTerminal("\n[*] Pulling CSV...");
 
         try {
-            // ===== CRITICAL FIX #1 =====
-            // Step 1: Get CSV from local agent
-            console.log("[PULL] Pulling from agent...");
             const response = await fetch(`${AGENT_URL}/agent/pull`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ com_port: comPortSelected })
             });
             const data = await response.json();
-            
-            if (!response.ok) {
-                addTerminal(`[✗] ${data.error || data.message}`);
+            if (response.ok) {
+                addTerminal(`[✓] CSV pulled (${data.csv_size} bytes)`);
+                
+                // ============================================================
+                // CRITICAL FIX: Send CSV to cloud server after pull
+                // ============================================================
+                if (analyzeBtn) analyzeBtn.disabled = false;
+                
+                try {
+                    console.log("[PULL] Sending CSV to cloud server...");
+                    addTerminal("[*] Saving CSV to cloud server...");
+                    
+                    const saveRes = await fetch(`${API_BASE}/save_csv`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            csv_content: data.csv_content
+                        })
+                    });
+                    
+                    if (saveRes.ok) {
+                        const saveData = await saveRes.json();
+                        console.log("[PULL] CSV saved to cloud server");
+                        addTerminal(`[✓] CSV saved to cloud (${saveData.csv_size} bytes)`);
+                    } else {
+                        console.warn("[PULL] Failed to save CSV to cloud:", saveRes.status);
+                        addTerminal("[⚠] Warning: Failed to save CSV to cloud, continuing anyway...");
+                    }
+                } catch (e) {
+                    console.warn("[PULL] Error saving CSV to cloud:", e.message);
+                    addTerminal(`[⚠] Warning: ${e.message}`);
+                    // Continue anyway - analysis might still work
+                }
+                
+                statusBox.textContent = "Data ready. Click 'Analyze' to proceed.";
+            } else {
+                addTerminal(`[✗] ${data.message}`);
                 pullBtn.disabled = false;
-                return;
             }
-            
-            addTerminal(`[✓] CSV pulled (${data.csv_size} bytes)`);
-            console.log("[PULL] CSV retrieved from agent, saving to server...");
-            
-            // ===== CRITICAL FIX #2 =====
-            // Step 2: SAVE CSV to server disk
-            console.log("[PULL] Sending CSV to server /pull endpoint...");
-            const saveResponse = await fetch(`${API_BASE}/pull`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    csv_content: data.csv_content 
-                })
-            });
-            
-            const saveData = await saveResponse.json();
-            if (!saveResponse.ok) {
-                addTerminal(`[✗] Failed to save CSV: ${saveData.message}`);
-                pullBtn.disabled = false;
-                return;
-            }
-            
-            addTerminal(`[✓] CSV saved to server (${saveData.csv_size} bytes)`);
-            console.log("[PULL] CSV successfully saved to server!");
-            
-            if (analyzeBtn) analyzeBtn.disabled = false;
-            statusBox.textContent = "Data ready. Click 'Analyze' to proceed.";
         } catch (e) {
             addTerminal(`[✗] ${e.message}`);
             pullBtn.disabled = false;
@@ -515,18 +517,15 @@ if (uploadBtn) {
             const response = await fetch(`${AGENT_URL}/agent/upload`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    script_content: scriptData.script,
-                    com_port: comPortSelected 
-                })
+                body: JSON.stringify({ script: scriptData.script, com_port: comPortSelected })
             });
             const data = await response.json();
             if (response.ok) {
-                addTerminal("[✓] Script uploaded to robot");
+                addTerminal(data.output);
                 if (runBtn) runBtn.disabled = false;
                 statusBox.textContent = "Script uploaded. Click 'Run' to execute.";
             } else {
-                addTerminal(`[✗] ${data.message || data.error}`);
+                addTerminal(`[✗] ${data.message}`);
                 uploadBtn.disabled = false;
             }
         } catch (e) {
@@ -554,7 +553,7 @@ if (runBtn) {
                 addTerminal("[✓] Done");
                 statusBox.textContent = "Complete!";
             } else {
-                addTerminal(`[✗] ${data.message || data.error}`);
+                addTerminal(`[✗] ${data.message}`);
                 runBtn.disabled = false;
             }
         } catch (e) {

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 FLL Robot Tracker - Local Agent
-FIXED: Added port configuration, ensure all endpoints use selected port
 
 This script runs on YOUR computer and enables the web app to:
 - Detect available serial ports
@@ -94,13 +93,6 @@ from datetime import datetime
 # Get COM port from environment or default
 COM_PORT = os.getenv("COM_PORT", "COM3")
 
-# Get Flask port from environment or default (FIXED for port configuration)
-AGENT_PORT = int(os.getenv("AGENT_PORT", "5001"))
-AGENT_HOST = os.getenv("AGENT_HOST", "0.0.0.0")
-
-print(f"\n[CONFIG] Agent will run on {AGENT_HOST}:{AGENT_PORT}")
-print(f"[CONFIG] Default COM port: {COM_PORT}")
-
 # Local storage for agent data
 AGENT_DATA_DIR = Path("./agent_data")
 AGENT_DATA_DIR.mkdir(exist_ok=True)
@@ -177,7 +169,7 @@ def detect_serial_ports():
 # ENDPOINTS
 # ============================================================
 
-@app.route("/agent/detect_ports", methods=["GET", "POST"])
+@app.route("/agent/detect_ports")
 def detect_ports():
     """
     Detect available serial ports on this computer
@@ -222,7 +214,7 @@ def detect_ports():
             "ports": []
         }), 500
 
-@app.route("/agent/ping", methods=["GET", "POST"])
+@app.route("/agent/ping")
 def ping():
     """Simple ping to check agent is running"""
     logger.debug("Ping received")
@@ -231,7 +223,7 @@ def ping():
         "message": "Agent is running"
     })
 
-@app.route("/agent/info", methods=["GET", "POST"])
+@app.route("/agent/info")
 def agent_info():
     """Get agent information"""
     return jsonify({
@@ -245,108 +237,80 @@ def agent_info():
 # HELPER FUNCTION FOR ROBOT COMMUNICATION
 # ============================================================
 
-def robot_command(cmd, timeout=15):
+def run_mpremote(args, timeout=10):
     """
-    Execute command on robot via mpremote
+    Run mpremote command
     
     Args:
-        cmd: List of command arguments for subprocess
+        args: List of mpremote arguments
         timeout: Command timeout in seconds
     
     Returns:
-        tuple: (success: bool, output: str, error: str)
+        CompletedProcess or None on error
     """
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        if result.returncode == 0:
-            return True, result.stdout, ""
-        else:
-            return False, "", result.stderr if result.stderr else "Unknown error"
+        cmd = ["mpremote", "connect", COM_PORT] + args
+        logger.debug(f"Running: {' '.join(cmd)}")
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        
+        logger.debug(f"Return code: {result.returncode}")
+        return result
+    
     except subprocess.TimeoutExpired:
-        return False, "", f"Command timeout after {timeout}s"
+        logger.error(f"mpremote timeout after {timeout}s")
+        return None
+    except FileNotFoundError:
+        logger.error("mpremote not found - install with: pip install mpremote")
+        return None
     except Exception as e:
-        return False, "", str(e)
+        logger.error(f"Error running mpremote: {e}")
+        return None
 
 # ============================================================
-# ROBOT ENDPOINTS
+# ROBOT COMMUNICATION ENDPOINTS
 # ============================================================
-
-@app.route("/agent/status", methods=["GET", "POST"])
-def agent_status():
-    """
-    Check robot connection status
-    
-    Returns:
-        {
-            "status": "connected" | "disconnected",
-            "com_port": "COM3"
-        }
-    """
-    logger.info("Status check requested")
-    
-    try:
-        # Try to list ports on the robot
-        selected_port = request.get_json(silent=True).get("com_port", COM_PORT) if request.is_json else COM_PORT
-        
-        cmd = ["mpremote", "connect", selected_port, "ls"]
-        success, output, error = robot_command(cmd, timeout=5)
-        
-        if success:
-            logger.info(f"Robot connected on {selected_port}")
-            return jsonify({
-                "status": "connected",
-                "com_port": selected_port,
-                "message": "Robot detected"
-            })
-        else:
-            logger.warning(f"Robot not found on {selected_port}")
-            return jsonify({
-                "status": "disconnected",
-                "com_port": selected_port,
-                "message": "Robot not detected"
-            }), 400
-    
-    except Exception as e:
-        logger.error(f"Status check failed: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
 
 @app.route("/agent/connect", methods=["POST"])
 def agent_connect():
     """
-    Connect to robot and record movement data
+    Upload collection script to robot and start recording
     
     Expects JSON:
         {
-            "script_content": "import runloop\n...",
+            "script_content": "import motor\n...",
             "com_port": "COM3"
         }
     
     Returns:
-        {
-            "status": "success",
-            "message": "Recording complete",
-            "output": "..."
-        }
+        {"status": "success", "message": "Recording complete"}
+        {"status": "error", "error": "..."} (500)
     """
     logger.info("Connect request received")
     
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data"}), 400
+        
         script_content = data.get("script_content")
-        selected_port = data.get("com_port", COM_PORT)  # FIXED: Extract from request!
+        selected_port = data.get("com_port", COM_PORT)
         
         if not script_content:
             return jsonify({"error": "script_content required"}), 400
         
-        logger.info(f"Using port: {selected_port}")
-        
-        # Save script to temp file
-        script_path = AGENT_DATA_DIR / "temp_recording.py"
+        # Save script locally
+        script_path = AGENT_DATA_DIR / "collect.py"
         script_path.write_text(script_content)
-        logger.info("Recording script saved")
+        logger.info(f"Saved collection script")
         
-        # Upload script
-        logger.info(f"Uploading to {selected_port}...")
+        # Upload to robot using selected port
+        logger.info(f"Uploading to robot on {selected_port}...")
         cmd = ["mpremote", "connect", selected_port, "cp", str(script_path.absolute()), ":main.py"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         
@@ -472,7 +436,7 @@ def agent_upload():
     
     Expects JSON:
         {
-            "script_content": "import runloop\n...",
+            "script": "import runloop\n...",
             "com_port": "COM3"
         }
     """
@@ -480,10 +444,10 @@ def agent_upload():
     
     try:
         data = request.get_json()
-        if not data or not data.get("script_content"):
-            return jsonify({"error": "script_content required"}), 400
+        if not data or not data.get("script"):
+            return jsonify({"error": "script required"}), 400
         
-        script_content = data["script_content"]
+        script_content = data["script"]
         selected_port = data.get("com_port", COM_PORT)
         script_path = AGENT_DATA_DIR / "replay.py"
         script_path.write_text(script_content)
@@ -568,8 +532,8 @@ if __name__ == "__main__":
     logger.info("Data Directory: " + str(AGENT_DATA_DIR))
     logger.info("Log Directory: " + str(LOG_DIR))
     logger.info("")
-    logger.info(f"Starting Flask server on http://{AGENT_HOST}:{AGENT_PORT}")
-    logger.info(f"Running on http://127.0.0.1:{AGENT_PORT}")
+    logger.info("Starting Flask server on http://0.0.0.0:5001")
+    logger.info("Running on http://127.0.0.1:5001")
     logger.info("")
     logger.info("This agent:")
     logger.info("  - Detects serial ports on your computer")
@@ -582,5 +546,5 @@ if __name__ == "__main__":
     logger.info("=" * 70)
     logger.info("")
     
-    # Run Flask with configurable port
-    app.run(host=AGENT_HOST, port=AGENT_PORT, debug=False)
+    # Run Flask
+    app.run(host="0.0.0.0", port=5001, debug=False)

@@ -1,5 +1,4 @@
 # app.py - Updated for Local Agent Integration
-# FIXED: Added /pull endpoint, port configuration, CSV handling
 
 from flask import Flask, jsonify, send_file, render_template, request
 from pathlib import Path
@@ -30,15 +29,6 @@ COLLECT_DATA_SCRIPT = BASE_DIR / "backend" / "collect_data_2_0.py"
 # Local Agent Configuration
 AGENT_URL = os.getenv("AGENT_URL", "http://localhost:5001")
 # Users run local_agent.py on THEIR computer (localhost from their perspective)
-
-# ============================================================
-# PORT CONFIGURATION (FOR PYTHONANYWHERE)
-# ============================================================
-
-FLASK_PORT = int(os.getenv("FLASK_PORT", "5000"))
-FLASK_HOST = os.getenv("FLASK_HOST", "127.0.0.1")
-
-print(f"[CONFIG] Flask will run on {FLASK_HOST}:{FLASK_PORT}")
 
 # ============================================================
 # LOCAL AGENT HELPER
@@ -96,7 +86,7 @@ def detect_ports():
     try:
         print("[PORTS] Requesting port detection from agent...")
         
-        result = call_agent("/agent/detect_ports")
+        result = call_agent("/agent/status")
         
         if "error" in result:
             print(f"[PORTS] Agent error: {result['error']}")
@@ -106,16 +96,18 @@ def detect_ports():
                 "ports": []
             }), 500
         
-        # Extract ports from result
-        ports = result.get("ports", [])
-        if ports:
-            print(f"[PORTS] Found {len(ports)} port(s)")
+        if result.get("status") == "connected":
+            com_port = result.get("com_port", "ROBOT")
+            print(f"[PORTS] Robot detected on {com_port}")
             return jsonify({
                 "status": "Success",
-                "ports": ports
+                "ports": [{
+                    "port": com_port,
+                    "description": "LEGO Robot (detected by local agent)"
+                }]
             })
         else:
-            print("[PORTS] No ports detected")
+            print("[PORTS] Robot not detected")
             return jsonify({
                 "status": "Error",
                 "message": "Robot not found on USB",
@@ -248,99 +240,69 @@ def connect():
             "output": f"✗ Error: {e}"
         }), 500
 
-# ============================================================
-# CSV PULL & SAVE (NEW - CRITICAL FIX)
-# ============================================================
-
-@app.route("/pull", methods=["POST"])
-def pull():
-    """
-    ✓ NEW ENDPOINT - CRITICAL FIX
-    
-    Receive CSV data from frontend (which pulled from agent)
-    Save to LOCAL_CSV_PATH for analysis
-    
-    This is the missing link that was preventing CSV updates!
-    """
-    try:
-        print("[PULL] Receiving CSV from frontend...")
-        
-        data = request.get_json()
-        csv_content = data.get("csv_content")
-        
-        if not csv_content:
-            print("[PULL] No CSV content provided")
-            return jsonify({
-                "status": "Error",
-                "message": "No CSV content provided"
-            }), 400
-        
-        # Ensure directory exists
-        LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Save the CSV to disk
-        LOCAL_CSV_PATH.write_text(csv_content, encoding='utf-8')
-        
-        csv_size = LOCAL_CSV_PATH.stat().st_size
-        print(f"[PULL] ✓ CSV saved to {LOCAL_CSV_PATH} ({csv_size} bytes)")
-        
-        return jsonify({
-            "status": "Success",
-            "csv_size": csv_size,
-            "message": f"CSV saved ({csv_size} bytes)"
-        })
-    
-    except Exception as e:
-        print(f"[PULL] ✗ Error: {e}")
-        return jsonify({
-            "status": "Error",
-            "message": str(e)
-        }), 500
-
 @app.route("/analyze")
 def analyze():
     """Analyze movement from CSV"""
     try:
-        print("[ANALYZE] Checking if CSV exists...")
+        print("[ANALYZE] Starting movement analysis...")
         
         if not LOCAL_CSV_PATH.exists():
-            print(f"[ANALYZE] CSV not found at {LOCAL_CSV_PATH}")
+            print("[ANALYZE] CSV not found")
             return jsonify({
                 "status": "Error",
-                "message": "No CSV file - pull data first",
+                "message": "No CSV",
                 "output": "✗ No CSV file"
             }), 400
         
         csv_size = LOCAL_CSV_PATH.stat().st_size
-        print(f"[ANALYZE] CSV found ({csv_size} bytes), analyzing...")
+        print(f"[ANALYZE] CSV exists ({csv_size} bytes)")
         
         from backend.movement_analysis import run
         segments_list = run(str(LOCAL_CSV_PATH), config=current_config)
         
-        # Format output for terminal
-        output_lines = ["✓ Analysis complete\n", "Detected Segments:"]
+        output = "✓ Analysis complete\n\nDetected Segments:\n"
         for segment in segments_list:
-            output_lines.append(
-                f"[{segment['start']} - {segment['end']}] {segment['type']:<20} "
-                f"Speed: {segment['speed']:>8.2f} deg/s Duration: {segment['duration']:.2f}s"
-            )
+            start = segment['start']
+            end = segment['end']
+            seg_type = segment['type']
+            speed = segment.get('avg_speed', 0)
+            duration = segment.get('duration', 0)
+            
+            output += f"[{start} - {end}] {seg_type:<20} Speed: {speed:>8.2f} deg/s Duration: {duration:.2f}s\n"
         
-        output = "\n".join(output_lines)
-        print("[ANALYZE] Complete")
+        print(f"[ANALYZE] Analysis complete with {len(segments_list)} segments")
+        
+        # Also save segments for visualization
+        segments_list_simple = [[s['start'], s['end'], s['type']] for s in segments_list]
+        with open(SEGMENTS_PATH, 'w') as f:
+            json.dump(segments_list_simple, f)
         
         return jsonify({
             "status": "Success",
+            "message": "Analysis complete",
             "output": output,
-            "segments": segments_list
+            "segments": segments_list_simple
         })
     
     except Exception as e:
-        print(f"[ANALYZE] Error: {e}")
+        print(f"[ANALYZE] Exception: {e}")
         return jsonify({
             "status": "Error",
             "message": str(e),
             "output": f"✗ Error: {e}"
         }), 500
+
+@app.route("/get_segments")
+def get_segments():
+    """Get segments for visualization"""
+    try:
+        from backend.movement_analysis import run
+        segments_list = run(str(LOCAL_CSV_PATH), config=current_config)
+        segments = [[s['start'], s['end'], s['type']] for s in segments_list]
+        
+        return jsonify({"status": "Success", "segments": segments})
+    except Exception as e:
+        return jsonify({"status": "Error", "message": str(e)}), 500
 
 @app.route("/convert")
 def convert():
@@ -356,9 +318,6 @@ def convert():
                 "output": "✗ No CSV file",
                 "script_content": ""
             }), 400
-        
-        csv_size = LOCAL_CSV_PATH.stat().st_size
-        print(f"[CONVERT] CSV found ({csv_size} bytes), generating script...")
         
         from backend.convert_to_code import generate_spike_script
         
@@ -395,17 +354,59 @@ def convert():
             "script_content": ""
         }), 500
 
-@app.route("/get_segments")
-def get_segments():
-    """Get segments for visualization"""
+# ============================================================
+# CSV DATA TRANSFER FROM LOCAL AGENT TO CLOUD
+# ============================================================
+
+@app.route("/save_csv", methods=["POST"])
+def save_csv():
+    """
+    Receive CSV data from local agent's pull operation
+    Save it to LOCAL_CSV_PATH for analysis and code generation
+    
+    This is the CRITICAL FIX for the caching issue!
+    
+    Flow:
+    1. Dashboard pulls CSV from robot via local_agent
+    2. Local agent returns CSV content
+    3. Dashboard sends CSV to this endpoint
+    4. Cloud server saves it to LOCAL_CSV_PATH
+    5. Subsequent analyze/convert operations use FRESH data
+    """
     try:
-        from backend.movement_analysis import run
-        segments_list = run(str(LOCAL_CSV_PATH), config=current_config)
-        segments = [[s['start'], s['end'], s['type']] for s in segments_list]
+        print("[CSV] Receiving CSV data from agent...")
         
-        return jsonify({"status": "Success", "segments": segments})
+        data = request.get_json()
+        if not data or "csv_content" not in data:
+            print("[CSV] Error: No CSV content in request")
+            return jsonify({
+                "status": "Error", 
+                "message": "No CSV content provided"
+            }), 400
+        
+        csv_content = data["csv_content"]
+        
+        # Ensure directory exists
+        LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save the CSV
+        LOCAL_CSV_PATH.write_text(csv_content, encoding='utf-8')
+        csv_size = LOCAL_CSV_PATH.stat().st_size
+        
+        print(f"[CSV] ✓ CSV saved to {LOCAL_CSV_PATH} ({csv_size} bytes)")
+        
+        return jsonify({
+            "status": "Success",
+            "message": f"CSV saved ({csv_size} bytes)",
+            "csv_size": csv_size
+        })
+    
     except Exception as e:
-        return jsonify({"status": "Error", "message": str(e)}), 500
+        print(f"[CSV] Error saving CSV: {e}")
+        return jsonify({
+            "status": "Error",
+            "message": str(e)
+        }), 500
 
 @app.route("/upload_script")
 def upload_script():
@@ -535,7 +536,7 @@ def download():
 @app.route("/agent_status")
 def agent_status():
     """Check if local agent is reachable"""
-    result = call_agent("/agent/ping")
+    result = call_agent("/agent/status")
     
     if "error" in result:
         print(f"[STATUS] Agent unreachable: {result['error']}")
@@ -548,6 +549,7 @@ def agent_status():
         print("[STATUS] Agent connected")
         return jsonify({
             "agent": "connected",
+            "com_port": result.get("com_port"),
             "agent_url": AGENT_URL
         })
 
@@ -570,14 +572,7 @@ def get_generated_script():
 
 if __name__ == "__main__":
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"\n{'='*70}")
     print(f"Starting FLL Robot Tracker")
-    print(f"{'='*70}")
     print(f"Local Agent URL: {AGENT_URL}")
     print(f"Data Directory: {DATA_DIR}")
-    print(f"CSV Path: {LOCAL_CSV_PATH}")
-    print(f"Flask Server: {FLASK_HOST}:{FLASK_PORT}")
-    print(f"{'='*70}\n")
-    
-    # For PythonAnywhere compatibility
-    app.run(debug=False, host=FLASK_HOST, port=FLASK_PORT)
+    app.run(debug=True, host="127.0.0.1", port=5000)
