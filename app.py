@@ -223,8 +223,16 @@ def connect():
         print(f"[CONNECT] Found script at {COLLECT_DATA_SCRIPT}")
         script_content = COLLECT_DATA_SCRIPT.read_text()
         
-        # Get the COM port the user selected
-        selected_port = current_config.get("com_port", "COM3")
+        # Get the COM port the user selected (required)
+        selected_port = current_config.get("com_port")
+        
+        if not selected_port:
+            return jsonify({
+                "status": "Error",
+                "message": "No COM port selected. Please select a port from the available ports first.",
+                "output": "✗ Please select a COM port"
+            }), 400
+        
         print(f"[CONNECT] Using port: {selected_port}")
         
         return jsonify({
@@ -279,8 +287,15 @@ def pull_csv():
     try:
         print("[PULL] Requesting CSV pull from agent...")
         
-        # Get the COM port the user selected
-        selected_port = current_config.get("com_port", "COM3")
+        # Get the COM port the user selected (required)
+        selected_port = current_config.get("com_port")
+        
+        if not selected_port:
+            return jsonify({
+                "status": "Error",
+                "message": "No COM port selected. Please select a port from the available ports first."
+            }), 400
+        
         print(f"[PULL] Using port: {selected_port}")
         
         result = call_agent(
@@ -495,8 +510,15 @@ def upload_script():
                 "output": "✗ No script generated yet"
             }), 400
         
-        # Get the COM port the user selected
-        selected_port = current_config.get("com_port", "COM3")
+        # Get the COM port the user selected (required)
+        selected_port = current_config.get("com_port")
+        
+        if not selected_port:
+            return jsonify({
+                "status": "Error",
+                "message": "No COM port selected. Please select a port from the available ports first."
+            }), 400
+        
         print(f"[UPLOAD] Using port: {selected_port}")
         
         script_content = GENERATED_SCRIPT_PATH.read_text()
@@ -549,8 +571,15 @@ def run_script():
                 "output": "✗ No script to run"
             }), 400
         
-        # Get the COM port the user selected
-        selected_port = current_config.get("com_port", "COM3")
+        # Get the COM port the user selected (required)
+        selected_port = current_config.get("com_port")
+        
+        if not selected_port:
+            return jsonify({
+                "status": "Error",
+                "message": "No COM port selected. Please select a port from the available ports first."
+            }), 400
+        
         print(f"[RUN] Using port: {selected_port}")
         
         result = call_agent(
