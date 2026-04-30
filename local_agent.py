@@ -1,88 +1,53 @@
 #!/usr/bin/env python3
-"""
-FLL Robot Tracker - Local Agent
 
-This script runs on YOUR computer and enables the web app to:
-- Detect available serial ports
-- Communicate with your LEGO robot via USB
-- Upload and run code on the robot
+import os
+import sys
+import subprocess
 
-===============================================================================
-QUICK START (4 STEPS)
-===============================================================================
+# --- SELF-BOOTSTRAP LOGIC ---
+def bootstrap():
+    venv_dir = os.path.join(os.getcwd(), "venv")
+    
+    # Check if we are already running inside the venv
+    is_venv = sys.prefix != sys.base_prefix
+    
+    if not is_venv:
+        if not os.path.exists(venv_dir):
+            print("First time setup: Creating virtual environment...")
+            subprocess.check_call([sys.executable, "-m", "venv", "venv"])
+            
+            # Determine pip path
+            pip_bin = os.path.join(venv_dir, "Scripts", "pip") if os.name == 'nt' else os.path.join(venv_dir, "bin", "pip")
+            
+            print("Installing dependencies (flask, pyserial, mpremote)...")
+            subprocess.check_call([pip_bin, "install", "flask", "pyserial", "mpremote"])
+            
+            print("\n" + "="*50)
+            print("SETUP COMPLETE!")
+            if os.name == 'nt':
+                print("To start the agent, run: venv\\Scripts\\python local_agent.py")
+            else:
+                print("To start the agent, run: ./venv/bin/python local_agent.py")
+            print("="*50)
+            sys.exit(0)
+        else:
+            # Venv exists but user isn't using it
+            print("Please run the agent using the virtual environment:")
+            if os.name == 'nt':
+                print("venv\\Scripts\\python local_agent.py")
+            else:
+                print("./venv/bin/python local_agent.py")
+            sys.exit(0)
 
-Step 1: Download this file
-  - Save this file as: local_agent.py
+# Run the bootstrap before any other imports (like flask)
+bootstrap()
 
-Step 2: Install dependencies
-  Open a terminal/command prompt in the same folder and run:
-  
-  Windows:
-    pip install flask pyserial mpremote
-  
-  Mac/Linux:
-    pip3 install flask pyserial mpremote
 
-Step 3: Run the agent
-  In the same terminal, run:
-  
-    python local_agent.py
-  
-  You should see:
-    Starting Flask server on http://0.0.0.0:5001
-    Running on http://127.0.0.1:5001
-  
-  Keep this terminal open!
-
-Step 4: Use the website
-  Visit: https://aksh19.pythonanywhere.com/
-  
-  The website will show "Agent: Online" (green badge)
-  You can now detect ports and use the app normally
-
-===============================================================================
-IMPORTANT
-===============================================================================
-
-- This agent must run on YOUR computer (not shared)
-- Keep the terminal open while using the website
-- The agent listens on port 5001 (local only)
-- Your robot connects via USB to your computer
-- Website finds the agent automatically (no IP configuration needed)
-
-===============================================================================
-TROUBLESHOOTING
-===============================================================================
-
-Agent not installing?
-  - Make sure you have Python 3.7+ installed
-  - Try: python -m pip install flask pyserial mpremote
-  - On Mac, try: pip3 instead of pip
-
-Agent not running?
-  - Check terminal output for error messages
-  - Make sure port 5001 isn't blocked by firewall
-  - Windows: Allow Python through Windows Defender
-
-Agent running but website shows "offline"?
-  - Refresh the website (F5)
-  - Check browser console (F12) for errors
-  - Make sure agent terminal shows "Running on"
-
-Robot not detected?
-  - Make sure robot is connected via USB
-  - Try: python scripts/check_ports.py (if you have it)
-  - Restart agent and refresh website
-
-===============================================================================
-"""
 
 from flask import Flask, jsonify, request
 from pathlib import Path
-import subprocess
 import json
 import time
-import os
 import logging
 from datetime import datetime
 
