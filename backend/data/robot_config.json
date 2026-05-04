@@ -1,9 +1,9 @@
 {
   "com_port": "COM7",
   "motors": {
-    "A": true,
-    "B": true,
-    "C": true
+    "A": "left_drive",
+    "B": "right_drive",
+    "C": "attachment"
   },
   "sensors": {
     "distance": "D",

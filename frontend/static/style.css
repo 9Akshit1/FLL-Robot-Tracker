@@ -13,6 +13,13 @@ h1 {
     font-size: 28px;
 }
 
+h2 {
+    color: #555;
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 18px;
+}
+
 h3 {
     color: #555;
     margin-top: 20px;

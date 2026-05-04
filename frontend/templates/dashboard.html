@@ -90,24 +90,28 @@
             border-radius: 5px;
             margin-bottom: 20px;
         }
+        
         .config-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 15px;
             margin-bottom: 15px;
         }
+        
         .config-item {
             background: white;
             padding: 15px;
             border-radius: 3px;
             border: 1px solid #ddd;
         }
+        
         .config-item label {
             display: block;
             font-weight: bold;
             margin-bottom: 8px;
             font-size: 13px;
         }
+        
         .config-item select {
             width: 100%;
             padding: 8px;
@@ -115,18 +119,37 @@
             border-radius: 3px;
             font-size: 12px;
         }
+        
+        .config-item select option:disabled {
+            color: #999;
+            background-color: #f5f5f5;
+        }
+
+        .config-help-text {
+            background: white;
+            padding: 12px;
+            border-radius: 3px;
+            border-left: 3px solid #0056b3;
+            margin-bottom: 15px;
+            font-size: 13px;
+            color: #555;
+            line-height: 1.5;
+        }
+        
         .button-row {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
             margin: 15px 0;
         }
+        
         .button-row .btn {
             flex: 1;
             min-width: 100px;
             padding: 8px 12px;
             font-size: 12px;
         }
+        
         .terminal {
             background: #1e1e1e;
             color: #0f0;
@@ -141,6 +164,7 @@
             word-wrap: break-word;
             margin: 10px 0;
         }
+        
         .code-preview {
             background: #f5f5f5;
             padding: 12px;
@@ -151,6 +175,7 @@
             font-family: 'Courier New', monospace;
             font-size: 10px;
         }
+        
         .code-preview pre {
             margin: 0;
         }
@@ -294,7 +319,7 @@
                 <div class="config-item">
                     <label>Select COM Port</label>
                     <select id="comPort">
-                        <option value="">Loading ports...</option>
+                        <option value="" disabled selected>Loading ports...</option>
                     </select>
                 </div>
             </div>
@@ -305,6 +330,7 @@
         <!-- CONFIG SECTION -->
         <div class="section config-section">
             <h2>Robot Configuration</h2>
+            
             <div id="configGrid" class="config-grid"></div>
 
             <div class="button-row">

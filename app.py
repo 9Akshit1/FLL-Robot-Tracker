@@ -28,7 +28,6 @@ COLLECT_DATA_SCRIPT = BASE_DIR / "backend" / "collect_data_2_0.py"
 
 # Local Agent Configuration
 AGENT_URL = os.getenv("AGENT_URL", "http://localhost:5001")
-# Users run local_agent.py on THEIR computer (localhost from their perspective)
 
 # ============================================================
 # LOCAL AGENT HELPER
@@ -79,9 +78,6 @@ def call_agent(endpoint, method="GET", data=None, timeout=30):
 def detect_ports():
     """
     Detect available serial ports via local agent
-    
-    The local agent detects ports because it runs on the user's computer
-    with USB access. Cloud server just relays the result.
     """
     try:
         print("[PORTS] Requesting port detection from agent...")
@@ -197,40 +193,36 @@ def connect():
         print(f"[CONNECT] Looking for script at: {COLLECT_DATA_SCRIPT}")
         print(f"[CONNECT] Absolute path: {COLLECT_DATA_SCRIPT.absolute()}")
         
-        # List contents of current directory
         try:
             contents = list(Path(".").iterdir())
             print(f"[CONNECT] Current directory contents: {[str(p) for p in contents]}")
         except Exception as e:
             print(f"[CONNECT] Error listing directory: {e}")
         
-        # Check if backend exists
         backend_path = Path("backend")
         if backend_path.exists():
             print(f"[CONNECT] Backend exists, contents: {list(backend_path.iterdir())}")
         else:
             print("[CONNECT] Backend directory not found")
         
-        # Get collection script
         if not COLLECT_DATA_SCRIPT.exists():
             print(f"[CONNECT] Script not found: {COLLECT_DATA_SCRIPT}")
             return jsonify({
                 "status": "Error",
                 "message": "Collection script not found",
-                "output": f"✗ {COLLECT_DATA_SCRIPT} not found"
+                "output": f"Error: {COLLECT_DATA_SCRIPT} not found"
             }), 500
         
         print(f"[CONNECT] Found script at {COLLECT_DATA_SCRIPT}")
         script_content = COLLECT_DATA_SCRIPT.read_text()
         
-        # Get the COM port the user selected (required)
         selected_port = current_config.get("com_port")
         
         if not selected_port:
             return jsonify({
                 "status": "Error",
                 "message": "No COM port selected. Please select a port from the available ports first.",
-                "output": "✗ Please select a COM port"
+                "output": "Error: Please select a COM port"
             }), 400
         
         print(f"[CONNECT] Using port: {selected_port}")
@@ -245,7 +237,7 @@ def connect():
         return jsonify({
             "status": "Error",
             "message": str(e),
-            "output": f"✗ Error: {e}"
+            "output": f"Error: {e}"
         }), 500
 
 @app.route("/save_csv", methods=["POST"])
@@ -260,7 +252,6 @@ def save_csv():
         
         LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
         
-        # Write with explicit flush and sync
         with open(LOCAL_CSV_PATH, 'w') as f:
             f.write(csv_content)
             f.flush()
@@ -287,7 +278,6 @@ def pull_csv():
     try:
         print("[PULL] Requesting CSV pull from agent...")
         
-        # Get the COM port the user selected (required)
         selected_port = current_config.get("com_port")
         
         if not selected_port:
@@ -309,22 +299,20 @@ def pull_csv():
             return jsonify({
                 "status": "Error",
                 "message": result["error"],
-                "output": f"✗ Error: {result['error']}"
+                "output": f"Error: {result['error']}"
             }), 500
         
-        # Save CSV locally for analysis
         csv_content = result.get("csv_content", "")
         if not csv_content:
             print("[PULL] Empty CSV received")
             return jsonify({
                 "status": "Error",
                 "message": "Empty CSV",
-                "output": "✗ CSV is empty"
+                "output": "Error: CSV is empty"
             }), 500
         
         LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
         
-        # Write with explicit flush
         with open(LOCAL_CSV_PATH, 'w') as f:
             f.write(csv_content)
             f.flush()
@@ -335,13 +323,11 @@ def pull_csv():
         print(f"[PULL] CSV saved to: {LOCAL_CSV_PATH.absolute()}")
         print(f"[PULL] Saved size: {len(csv_content)} bytes")
         
-        # Verify the file was written
         actual_size = LOCAL_CSV_PATH.stat().st_size
         actual_content = LOCAL_CSV_PATH.read_text()[:100]
         print(f"[PULL] VERIFY - Actual file size: {actual_size} bytes")
         print(f"[PULL] VERIFY - Actual content start: {repr(actual_content)}")
         
-        # Get headers
         headers = csv_content.split('\n')[0].split(',') if csv_content else []
         
         print(f"[PULL] CSV received ({csv_size} bytes)")
@@ -349,7 +335,7 @@ def pull_csv():
             "status": "Success",
             "csv_size": csv_size,
             "message": "Pulled from robot",
-            "output": f"✓ CSV pulled\n✓ Size: {csv_size} bytes\n✓ Headers: {len(headers)} columns",
+            "output": f"OK: CSV pulled\nOK: Size: {csv_size} bytes\nOK: Headers: {len(headers)} columns",
             "headers": headers
         })
     
@@ -358,7 +344,7 @@ def pull_csv():
         return jsonify({
             "status": "Error",
             "message": str(e),
-            "output": f"✗ Error: {e}"
+            "output": f"Error: {e}"
         }), 500
 
 @app.route("/analyze")
@@ -369,6 +355,7 @@ def analyze():
         print(f"[ANALYZE] Checking CSV at: {LOCAL_CSV_PATH}")
         print(f"[ANALYZE] Absolute path: {LOCAL_CSV_PATH.absolute()}")
         print(f"[ANALYZE] Exists: {LOCAL_CSV_PATH.exists()}")
+        
         if LOCAL_CSV_PATH.exists():
             print(f"[ANALYZE] File size: {LOCAL_CSV_PATH.stat().st_size} bytes")
             content = LOCAL_CSV_PATH.read_text()[:300]
@@ -379,10 +366,9 @@ def analyze():
             return jsonify({
                 "status": "Error",
                 "message": "No CSV",
-                "output": "✗ No CSV file. Pull data first."
+                "output": "Error: No CSV file. Pull data first."
             }), 400
         
-        # Force re-read the file to avoid caching issues
         csv_data = LOCAL_CSV_PATH.read_text()
         actual_size = LOCAL_CSV_PATH.stat().st_size
         lines = csv_data.split('\n')
@@ -390,10 +376,9 @@ def analyze():
         print(f"[ANALYZE] Content preview: {repr(csv_data[:200])}")
         print(f"[ANALYZE] Last line: {repr(lines[-2] if len(lines) > 1 else 'NO DATA')}")
         
-        # CRITICAL: Clear any Python module cache for movement_analysis
         import sys
         if 'backend.movement_analysis' in sys.modules:
-            print("[ANALYZE] WARNING: Clearing module cache - reloading movement_analysis")
+            print("[ANALYZE] Reloading movement_analysis...")
             import importlib
             import backend.movement_analysis
             importlib.reload(backend.movement_analysis)
@@ -402,16 +387,23 @@ def analyze():
             from backend.movement_analysis import run
         
         print(f"[ANALYZE] Calling movement_analysis.run with: {LOCAL_CSV_PATH}")
-        output = run(str(LOCAL_CSV_PATH), config=current_config)
-        print(f"[ANALYZE] Got {len(output)} segments")
+        segments, summary = run(str(LOCAL_CSV_PATH), config=current_config)
         
-        # Format output
-        result_text = "✓ Analysis complete\n\nDetected Segments:\n"
-        for s in output:
-            result_text += f"[{s['start']:.0f} - {s['end']:.0f}] {s['type']:20} Speed: {s['avg_speed']:6.2f} deg/s Duration: {s['duration']:.2f}s\n"
+        print(f"[ANALYZE] Got {len(segments)} segments")
         
-        print(f"[ANALYZE] Analysis complete - {len(output)} segments detected")
-        print(f"[ANALYZE] Segments: {output}")
+        result_text = "OK: Kinematic Analysis Complete\n\n"
+        result_text += f"Total Duration: {summary.get('total_time_ms', 0)}ms\n"
+        result_text += f"Unique Actions: {', '.join(summary.get('unique_actions', []))}\n\n"
+        result_text += "Motion Segments:\n"
+        
+        for i, s in enumerate(segments, 1):
+            result_text += f"\n[{i}] {s['description']}\n"
+            result_text += f"    Time: {s['start_ms']:.0f}ms - {s['end_ms']:.0f}ms ({s['duration_ms']:.0f}ms)\n"
+            result_text += f"    Actions: {', '.join(s['actions'])}\n"
+            result_text += f"    Linear: {s['avg_linear_vel']}deg/s, Angular: {s['avg_angular_vel']}deg/s\n"
+        
+        print(f"[ANALYZE] Analysis complete - {len(segments)} segments detected")
+        
         return jsonify({
             "status": "Success",
             "message": "Analysis complete",
@@ -420,10 +412,12 @@ def analyze():
     
     except Exception as e:
         print(f"[ANALYZE] Exception: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             "status": "Error",
             "message": str(e),
-            "output": f"✗ Error: {e}"
+            "output": f"Error: {e}"
         }), 500
 
 @app.route("/get_segments")
@@ -431,10 +425,11 @@ def get_segments():
     """Get segments for visualization"""
     try:
         from backend.movement_analysis import run
-        segments_list = run(str(LOCAL_CSV_PATH), config=current_config)
-        segments = [[s['start'], s['end'], s['type']] for s in segments_list]
+        segments, summary = run(str(LOCAL_CSV_PATH), config=current_config)
         
-        return jsonify({"status": "Success", "segments": segments})
+        segments_list = [[s['start_ms'], s['end_ms'], s['description']] for s in segments]
+        
+        return jsonify({"status": "Success", "segments": segments_list})
     except Exception as e:
         return jsonify({"status": "Error", "message": str(e)}), 500
 
@@ -449,7 +444,7 @@ def convert():
             return jsonify({
                 "status": "Error",
                 "message": "No CSV",
-                "output": "✗ No CSV file",
+                "output": "Error: No CSV file",
                 "script_content": ""
             }), 400
         
@@ -458,6 +453,7 @@ def convert():
         output_path = DATA_DIR / "replay.py"
         print(f"[CONVERT] Generating from CSV: {LOCAL_CSV_PATH}")
         print(f"[CONVERT] CSV exists: {LOCAL_CSV_PATH.exists()}")
+        
         if LOCAL_CSV_PATH.exists():
             csv_content = LOCAL_CSV_PATH.read_text()
             print(f"[CONVERT] CSV size: {len(csv_content)} bytes, content_start: {repr(csv_content[:100])}")
@@ -470,11 +466,12 @@ def convert():
             size = GENERATED_SCRIPT_PATH.stat().st_size
             script_content = GENERATED_SCRIPT_PATH.read_text()
             print(f"[CONVERT] Script generated ({size} bytes)")
+            
             return jsonify({
                 "status": "Success",
                 "script_size": size,
                 "message": f"Generated ({size} bytes)",
-                "output": f"✓ Script generated\n✓ Size: {size} bytes",
+                "output": f"OK: Script generated\nOK: Size: {size} bytes",
                 "script_content": script_content
             })
         else:
@@ -482,15 +479,17 @@ def convert():
             return jsonify({
                 "status": "Error",
                 "message": "Failed to generate",
-                "output": "✗ Script creation failed",
+                "output": "Error: Script creation failed",
                 "script_content": ""
             }), 500
     except Exception as e:
         print(f"[CONVERT] Exception: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             "status": "Error",
             "message": str(e),
-            "output": f"✗ Error: {e}",
+            "output": f"Error: {e}",
             "script_content": ""
         }), 500
 
@@ -507,10 +506,9 @@ def upload_script():
             return jsonify({
                 "status": "Error",
                 "message": "No script",
-                "output": "✗ No script generated yet"
+                "output": "Error: No script generated yet"
             }), 400
         
-        # Get the COM port the user selected (required)
         selected_port = current_config.get("com_port")
         
         if not selected_port:
@@ -537,14 +535,14 @@ def upload_script():
             return jsonify({
                 "status": "Error",
                 "message": result["error"],
-                "output": f"✗ {result['error']}"
+                "output": f"Error: {result['error']}"
             }), 500
         
         print("[UPLOAD] Script uploaded successfully")
         return jsonify({
             "status": "Success",
             "message": "Script uploaded",
-            "output": "✓ Script uploaded to robot\n✓ Ready to run"
+            "output": "OK: Script uploaded to robot\nOK: Ready to run"
         })
     
     except Exception as e:
@@ -552,7 +550,7 @@ def upload_script():
         return jsonify({
             "status": "Error",
             "message": str(e),
-            "output": f"✗ Error: {e}"
+            "output": f"Error: {e}"
         }), 500
 
 @app.route("/run_script")
@@ -568,10 +566,9 @@ def run_script():
             return jsonify({
                 "status": "Error",
                 "message": "No script",
-                "output": "✗ No script to run"
+                "output": "Error: No script to run"
             }), 400
         
-        # Get the COM port the user selected (required)
         selected_port = current_config.get("com_port")
         
         if not selected_port:
@@ -586,7 +583,7 @@ def run_script():
             "/agent/run",
             method="POST",
             data={"com_port": selected_port},
-            timeout=600  # 10 minutes
+            timeout=600
         )
         
         if "error" in result:
@@ -594,7 +591,7 @@ def run_script():
             return jsonify({
                 "status": "Error",
                 "message": result["error"],
-                "output": f"✗ {result['error']}"
+                "output": f"Error: {result['error']}"
             }), 500
         
         output = result.get("output", "Script executed")
@@ -602,7 +599,7 @@ def run_script():
         return jsonify({
             "status": "Success",
             "message": "Script executed",
-            "output": f"✓ Script ran\n\n{output}"
+            "output": f"OK: Script ran\n\n{output}"
         })
     
     except Exception as e:
@@ -610,7 +607,7 @@ def run_script():
         return jsonify({
             "status": "Error",
             "message": str(e),
-            "output": f"✗ Error: {e}"
+            "output": f"Error: {e}"
         }), 500
 
 @app.route("/download")
@@ -676,12 +673,11 @@ def debug_csv_full():
         content = LOCAL_CSV_PATH.read_text()
         lines = content.split('\n')
         
-        # Extract first motor column data to see actual movement
         motor_data = []
         if len(lines) > 1:
-            for i, line in enumerate(lines[1:11]):  # First 10 data rows
+            for i, line in enumerate(lines[1:11]):
                 if line:
-                    motor_data.append(line.split(',')[0:4])  # Time and first motor
+                    motor_data.append(line.split(',')[0:4])
         
         return jsonify({
             "path": str(LOCAL_CSV_PATH),
