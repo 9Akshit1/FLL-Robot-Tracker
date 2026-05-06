@@ -1,15 +1,20 @@
-# ============================================================
-# convert_to_code.py - Kid-Friendly Pybricks Code Generation
-# ============================================================
-
 import csv
 from typing import List, Dict, Tuple
 import os
 from pathlib import Path
 import json
 
+"""
+Load CSV data with dynamic motor support
+
+Args:
+- csv_path
+- config
+
+Returns:
+- rows, motor_roles if config else {}
+"""
 def load_rows(csv_path, config=None):
-    """Load CSV data with dynamic motor support"""
     rows = []
 
     try:
@@ -55,19 +60,33 @@ def load_rows(csv_path, config=None):
     print(f"Loaded {len(rows)} rows")
     return rows, motor_roles if config else {}
 
+"""
+Compute motor speed (0-1000 range)
+
+Args:
+- deg
+- dt_ms
+
+Returns:
+- int
+"""
 def compute_speed(deg, dt_ms):
-    """Compute motor speed (0-1000 range)"""
     if dt_ms <= 0 or deg == 0:
         return 0
     speed = int((abs(deg) / dt_ms) * 1000)
     return max(100, min(1000, speed))
 
+"""
+Convert CSV rows into semantic motion commands
+
+Args:
+- rows
+- config
+
+Returns:
+- commands: list of (time_ms, left_deg, right_deg, attachments_dict)
+"""
 def generate_motion_commands(rows, config=None) -> List[Tuple]:
-    """
-    Convert CSV rows into semantic motion commands
-    
-    Returns list of (time_ms, left_deg, right_deg, attachments_dict)
-    """
     if not rows or len(rows) < 2:
         return []
     
@@ -113,10 +132,18 @@ def generate_motion_commands(rows, config=None) -> List[Tuple]:
     
     return commands
 
+""""
+Generate FLL-style readable code with semantic functions
+
+Args:
+- csv_path
+- out_path
+- config
+
+Returns:
+- out_path
+"""
 def generate_spike_script(csv_path, out_path, config=None):
-    """
-    Generate FLL-style readable code with semantic functions
-    """
     rows, motor_roles = load_rows(csv_path, config)
     
     if not rows or len(rows) < 2:
