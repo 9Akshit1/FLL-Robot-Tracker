@@ -1,6 +1,9 @@
-# ============================================================
+"""
 # movement_analysis.py - Vector Kinematics Movement Classification
-# ============================================================
+
+Course: ICS4U
+Summary:
+"""
 
 import csv
 import os
@@ -10,7 +13,9 @@ import json
 import math
 
 class DataPoint:
-    """Single data sample from robot sensors"""
+    """
+    Single data sample from robot sensors
+    """
     def __init__(self, data_dict):
         self.t = float(data_dict.get("time_ms", 0))
         
