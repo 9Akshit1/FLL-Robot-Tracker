@@ -17,13 +17,13 @@ PORT_MAP = {
 
 # config loading
 def load_config():
-    """Load robot config from hub - simplified JSON parsing"""
+    """Load robot config from hub (simplified JSON parsing)"""
     try:
         with open("/flash/robot_config.json", "r") as f:
             content = f.read()
             config = {}
             
-            # Simple parsing - look for motor assignments
+            # Look for motor assignments
             config["motors"] = {}
             
             # Check which motors are configured
