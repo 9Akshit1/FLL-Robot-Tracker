@@ -1,6 +1,6 @@
 """
 collect_data_2_0.py - FLL Robot Data Logger 2.0
-ICS3UE
+ICS4U
 
 Summary:
 
