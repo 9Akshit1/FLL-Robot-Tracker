@@ -1,6 +1,6 @@
 // frontend/static/dashboard.js
 
-const API_BASE = window.location.origin; 
+const API_BASE = window.location.origin;
 const AGENT_URL = "http://localhost:5001";
 
 let terminalOutput = [];
@@ -47,12 +47,12 @@ const DEVICE_TYPES = [
 async function checkAgentStatus() {
     try {
         console.log("[AGENT] Checking status at", AGENT_URL);
-        
+
         const response = await fetch(`${AGENT_URL}/agent/ping`, {
             method: "GET",
             timeout: 3000
         });
-        
+
         if (response.ok) {
             const data = await response.json();
             console.log("[AGENT] Agent is ONLINE");
@@ -101,23 +101,23 @@ function showAgentOffline() {
 
 function init() {
     console.log("[INIT] Starting initialization");
-    
+
     // 1. Generate config UI
     generateConfigUI();
-    
+
     // 2. Load saved preferences
     loadSavedPreferences();
-    
+
     // 3. Check agent status NOW
     console.log("[INIT] Checking agent status...");
     checkAgentStatus();
-    
+
     // 4. Auto-check every 3 seconds
     setInterval(() => {
         console.log("[AUTO] Checking agent status...");
         checkAgentStatus();
     }, 3000);
-    
+
     addTerminal("System initialized. Checking for local agent...");
 }
 
@@ -137,7 +137,7 @@ function loadSavedPreferences() {
     try {
         const config = JSON.parse(saved);
         comPortSelected = config.com_port;
-        
+
         PORT_LABELS.forEach(port => {
             const select = document.getElementById(`port${port}`);
             if (!select) return;
@@ -149,7 +149,7 @@ function loadSavedPreferences() {
                 if (motorRole === "left_drive") select.value = "left_drive";
                 else if (motorRole === "right_drive") select.value = "right_drive";
                 else if (motorRole === "attachment") select.value = "attachment";
-            } 
+            }
             else if (config.sensors) {
                 for (const [sensorType, assignedPort] of Object.entries(config.sensors)) {
                     if (assignedPort === port) {
@@ -176,16 +176,16 @@ function loadSavedPreferences() {
 
 function generateConfigUI() {
     configGrid.innerHTML = "";
-    
+
     PORT_LABELS.forEach(port => {
         const item = document.createElement("div");
         item.className = "config-item";
-        
+
         const selectHTML = DEVICE_TYPES.map(type => {
             const disabled = type.disabled ? 'disabled' : '';
             return `<option value="${type.id}" ${disabled}>${type.label}</option>`;
         }).join("");
-        
+
         item.innerHTML = `
             <label>Port ${port}</label>
             <select id="port${port}">
@@ -202,7 +202,7 @@ function generateConfigUI() {
 
 async function detectPorts() {
     console.log("[PORTS] Detect ports clicked");
-    
+
     // Check agent first
     const agentOk = await checkAgentStatus();
     if (!agentOk) {
@@ -213,15 +213,15 @@ async function detectPorts() {
 
     detectPortsBtn.disabled = true;
     portStatus.textContent = "Scanning ports via local agent...";
-    
+
     try {
         console.log("[PORTS] Fetching from", `${AGENT_URL}/agent/detect_ports`);
-        
+
         const response = await fetch(`${AGENT_URL}/agent/detect_ports`);
         const result = await response.json();
-        
+
         console.log("[PORTS] Response:", result);
-        
+
         if (result.error) {
             console.log("[PORTS] Error in response:", result.error);
             portStatus.textContent = "Error: " + result.error;
@@ -268,7 +268,7 @@ function buildConfigObject() {
         if (!select) return;
 
         const value = select.value;
-        
+
         if (value === "left_drive" || value === "right_drive" || value === "attachment") {
             config.motors[port] = value;
         } else if (value === "distance_sensor") {
@@ -313,7 +313,7 @@ if (saveConfigBtn) {
                 saveToLocalStorage();
                 currentConfig = config;
                 configStatus.textContent = "Configuration saved and uploaded to robot";
-                
+
                 if (connectBtn) connectBtn.disabled = false;
                 statusBox.textContent = "Ready to record. Click 'Connect & Record' to start.";
                 addTerminal("\n[*] Robot configured successfully");
@@ -379,9 +379,11 @@ if (connectBtn) {
                 throw new Error("Failed to get script: " + scriptRes.status);
             }
             const scriptData = await scriptRes.json();
-            
+
             addTerminal("[*] Uploading code...");
-            
+            addTerminal("[*] Press LEFT on robot brain to START recording");
+            addTerminal("[*] Press RIGHT on robot brain to STOP recording");
+
             // Second: Send to agent
             const response = await fetch(`${AGENT_URL}/agent/connect`, {
                 method: 'POST',
@@ -432,9 +434,9 @@ if (pullBtn) {
                 pullBtn.disabled = false;
                 return;
             }
-            
+
             addTerminal("[OK] CSV pulled from agent (" + data.csv_size + " bytes)");
-            
+
             // Step 2: Save CSV to PythonAnywhere server
             addTerminal("[*] Saving to server...");
             const saveRes = await fetch(`${API_BASE}/save_csv`, {
@@ -460,23 +462,26 @@ if (pullBtn) {
 
 if (analyzeBtn) {
     analyzeBtn.addEventListener("click", async () => {
-        analyzeBtn.disabled = true;
         addTerminal("\n[*] Analyzing movement...");
-        
+
         try {
-            const response = await fetch(`${API_BASE}/analyze`);
+            const response = await fetch(`${API_BASE}/analyze`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ config: currentConfig })
+            });
             const data = await response.json();
             if (response.ok) {
                 addTerminal(data.output);
                 if (convertBtn) convertBtn.disabled = false;
+                if (analyzeBtn) analyzeBtn.disabled = true;  // FIX: Gray out analyze button
                 statusBox.textContent = "Analysis complete. Click 'Generate' to create replay script.";
             } else {
                 addTerminal("[Error] " + data.message);
-                analyzeBtn.disabled = false;
+                if (analyzeBtn) analyzeBtn.disabled = false;  // Re-enable if error
             }
         } catch (e) {
             addTerminal("[Error] " + e.message);
-            analyzeBtn.disabled = false;
         }
     });
 }
@@ -485,7 +490,7 @@ if (convertBtn) {
     convertBtn.addEventListener("click", async () => {
         convertBtn.disabled = true;
         addTerminal("\n[*] Generating script...");
-        
+
         try {
             const response = await fetch(`${API_BASE}/convert`);
             const data = await response.json();
@@ -512,10 +517,10 @@ if (uploadBtn) {
     uploadBtn.addEventListener("click", async () => {
         uploadBtn.disabled = true;
         addTerminal("\n[*] Uploading script...");
-        
+
         try {
             // First: Get the generated script from PythonAnywhere
-            const scriptRes = await fetch(`${API_BASE}/get_generated_script`); 
+            const scriptRes = await fetch(`${API_BASE}/get_generated_script`);
             const scriptData = await scriptRes.json();
             // Second: Send it to the local agent
             const response = await fetch(`${AGENT_URL}/agent/upload`, {
@@ -541,28 +546,44 @@ if (uploadBtn) {
 
 if (runBtn) {
     runBtn.addEventListener("click", async () => {
-        runBtn.disabled = true;
         addTerminal("\n[*] Running script...");
         addTerminal("[*] Watch your robot!");
-        
+
         try {
+            if (!comPortSelected) {
+                comPortSelected = comPort.value;
+            }
+
+            if (!comPortSelected) {
+                addTerminal("[Error] No COM port selected");
+                return;
+            }
+
+            // FIXED: Call agent DIRECTLY like Connect & Record does
+            // Don't go through PythonAnywhere
+            console.log("[RUN] Calling agent directly at:", AGENT_URL);
             const response = await fetch(`${AGENT_URL}/agent/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ com_port: comPortSelected })
+                body: JSON.stringify({
+                    com_port: comPortSelected
+                })
             });
+
             const data = await response.json();
-            if (response.ok) {
-                addTerminal(data.output);
-                addTerminal("[OK] Done");
-                statusBox.textContent = "Complete!";
+
+            if (response.ok && (data.status === 'success' || data.status === 'Success')) {
+                addTerminal("[OK] Script executed successfully!");
+                addTerminal(data.output || data.message || 'Script ran on robot');
             } else {
-                addTerminal("[Error] " + data.message);
-                runBtn.disabled = false;
+                // Show actual error message
+                const errorMsg = data.message || data.error || 'Unknown error';
+                addTerminal("[Error] " + errorMsg);
+                console.error("Run error details:", data);
             }
-        } catch (e) {
-            addTerminal("[Error] " + e.message);
-            runBtn.disabled = false;
+        } catch (error) {
+            addTerminal("[Error] " + error.message);
+            console.error("Run exception:", error);
         }
     });
 }

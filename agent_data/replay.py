@@ -1,72 +1,47 @@
-import runloop
 import motor
+import time
+import runloop
 from hub import port
 
+PORT_MAP = {
+    "A": port.A,
+    "B": port.B,
+    "C": port.C,
+}
 
-# Motor setup
-left_motor = port.A
-right_motor = port.B
+timeline = [{'delay': 71, 'motors': {'A': (-288, 647), 'B': (276, 535)}}, {'delay': 72, 'motors': {'A': (-301, 361), 'B': (287, 305)}}, {'delay': 76, 'motors': {'A': (-428, 750), 'B': (401, 750)}}, {'delay': 76, 'motors': {'A': (-467, 750), 'B': (441, 750)}}, {'delay': 76, 'motors': {'A': (-484, 447), 'B': (457, 421)}}, {'delay': 78, 'motors': {'A': (-495, 153)}}, {'delay': 79, 'motors': {'A': (-506, 278)}}, {'delay': 80, 'motors': {'A': (-515, 225)}}, {'delay': 79, 'motors': {'A': (-537, 455)}}, {'delay': 607, 'motors': {'A': (-625, 289), 'B': (453, 32)}}, {'delay': 83, 'motors': {'C': (19, 289)}}, {'delay': 85, 'motors': {'C': (38, 447)}}, {'delay': 84, 'motors': {'C': (55, 404)}}, {'delay': 84, 'motors': {'C': (73, 428)}}, {'delay': 86, 'motors': {'C': (89, 372)}}, {'delay': 86, 'motors': {'C': (106, 395)}}, {'delay': 86, 'motors': {'C': (121, 348)}}, {'delay': 86, 'motors': {'C': (132, 255)}}, {'delay': 86, 'motors': {'C': (152, 232)}}, {'delay': 88, 'motors': {'C': (163, 250)}}, {'delay': 88, 'motors': {'C': (171, 181)}}, {'delay': 67, 'motors': {'C': (140, 447)}}, {'delay': 603, 'motors': {'C': (71, 228)}}, {'delay': 75, 'motors': {'C': (51, 293)}}, {'delay': 74, 'motors': {'C': (37, 378)}}, {'delay': 81, 'motors': {'C': (29, 197)}}, {'delay': 75, 'motors': {'C': (14, 186)}}]
 
-# Helper function to calculate motor speed
-def get_speed(degrees, time_ms):
-    if time_ms <= 0 or degrees == 0:
-        return 0
-    speed = int((abs(degrees) / time_ms) * 1000)
-    return max(100, min(1000, speed))
-
-# Semantic movement functions
-def move_forward(distance_deg, speed=500):
-    '''Drive robot forward'''
-    motor.run_for_degrees(left_motor, distance_deg, speed)
-    motor.run_for_degrees(right_motor, distance_deg, speed)
-
-def move_backward(distance_deg, speed=500):
-    '''Drive robot backward'''
-    motor.run_for_degrees(left_motor, -distance_deg, speed)
-    motor.run_for_degrees(right_motor, -distance_deg, speed)
-
-def turn_left(angle_deg, speed=400):
-    '''Turn robot left in place'''
-    motor.run_for_degrees(left_motor, -angle_deg, speed)
-    motor.run_for_degrees(right_motor, angle_deg, speed)
-
-def turn_right(angle_deg, speed=400):
-    '''Turn robot right in place'''
-    motor.run_for_degrees(left_motor, angle_deg, speed)
-    motor.run_for_degrees(right_motor, -angle_deg, speed)
-
-def move_custom(left_deg, right_deg, speed=500):
-    '''Move with different speeds on each side (for curves)'''
-    motor.run_for_degrees(left_motor, left_deg, speed)
-    motor.run_for_degrees(right_motor, right_deg, speed)
-
+def execute_frame(motors_command):
+    for port_name, (target_degrees, speed) in motors_command.items():
+        if port_name in PORT_MAP:
+            motor.run_for_degrees(PORT_MAP[port_name], target_degrees, speed)
 
 async def main():
-    '''Main replay routine'''
     print("Starting replay...")
+    print("Total frames: " + str(len(timeline)))
+    print("Motors: " + str(list(PORT_MAP.keys())))
     
-    # Execute recorded movements
-    move_custom(0, 1, 100)
-    move_custom(0, 2, 100)
-    move_custom(0, -1, 100)
-    move_custom(1, -2, 100)
-    turn_left(5, 100)
-    turn_left(22, 126)
-    turn_left(32, 176)
-    turn_left(33, 181)
-    turn_left(32, 168)
-    turn_left(30, 155)
-    turn_left(32, 170)
-    turn_left(29, 163)
-    turn_left(31, 166)
-    turn_left(28, 146)
-    turn_left(24, 131)
-    turn_left(20, 110)
-    turn_left(19, 100)
-    turn_left(22, 119)
-    turn_left(5, 100)
-    
-    print("Done!")
+    try:
+        for frame_idx, frame_data in enumerate(timeline):
+            delay_ms = frame_data['delay']
+            motors_cmd = frame_data['motors']
+            
+            if not motors_cmd:
+                if delay_ms > 0:
+                    await runloop.sleep_ms(delay_ms)
+                continue
+            
+            execute_frame(motors_cmd)
+            
+            if delay_ms > 0:
+                await runloop.sleep_ms(delay_ms)
+            
+            if (frame_idx + 1) % 10 == 0:
+                print("Frame " + str(frame_idx + 1) + "/" + str(len(timeline)))
+        
+        print("Replay complete!")
+        
+    except Exception as e:
+        print("Error: " + str(e))
 
-# Run the program
 runloop.run(main())

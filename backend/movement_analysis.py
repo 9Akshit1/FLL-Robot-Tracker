@@ -180,16 +180,36 @@ def compute_kinematics(data: List[DataPoint], config=None) -> List[KinematicStat
             dt_sec = (data[i].t - data[i-1].t) / 1000.0
             if dt_sec > 0:
                 # Compute motor velocities (deg/sec)
-                left_key = f"motor{left_motor}_rel_deg"
-                right_key = f"motor{right_motor}_rel_deg"
+                # Try multiple key formats in case column naming varies
+                left_vel = 0
+                right_vel = 0
                 
-                if left_key in data[i].motors and left_key in data[i-1].motors:
-                    left_delta = data[i].motors[left_key] - data[i-1].motors[left_key]
-                    state.left_vel = left_delta / dt_sec
+                # Try different left motor key formats
+                for left_key in [
+                    f"motor{left_motor}_rel_deg",
+                    f"motor_{left_motor}_rel_deg",
+                    f"motorA_rel_deg" if left_motor.upper() == "A" else None,
+                    f"motor_A_rel_deg" if left_motor.upper() == "A" else None,
+                ]:
+                    if left_key and left_key in data[i].motors and left_key in data[i-1].motors:
+                        left_delta = data[i].motors[left_key] - data[i-1].motors[left_key]
+                        left_vel = left_delta / dt_sec
+                        break
                 
-                if right_key in data[i].motors and right_key in data[i-1].motors:
-                    right_delta = data[i].motors[right_key] - data[i-1].motors[right_key]
-                    state.right_vel = right_delta / dt_sec
+                # Try different right motor key formats
+                for right_key in [
+                    f"motor{right_motor}_rel_deg",
+                    f"motor_{right_motor}_rel_deg",
+                    f"motorB_rel_deg" if right_motor.upper() == "B" else None,
+                    f"motor_B_rel_deg" if right_motor.upper() == "B" else None,
+                ]:
+                    if right_key and right_key in data[i].motors and right_key in data[i-1].motors:
+                        right_delta = data[i].motors[right_key] - data[i-1].motors[right_key]
+                        right_vel = right_delta / dt_sec
+                        break
+                
+                state.left_vel = left_vel
+                state.right_vel = right_vel
                 
                 # Attachment motor velocities
                 for port in attachment_motors:

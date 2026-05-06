@@ -25,18 +25,18 @@ def load_config():
         with open("/flash/robot_config.json", "r") as f:
             content = f.read()
             config = {}
-            
+
             # Simple parsing - look for motor assignments
             config["motors"] = {}
-            
+
             # Check which motors are configured
             for motor_letter in ["A", "B", "C"]:
                 if f'"{motor_letter}"' in content:
                     config["motors"][motor_letter] = motor_letter  # Mark as enabled
-            
+
             # Parse sensors
             config["sensors"] = {}
-            
+
             # Distance sensor
             if '"distance"' in content:
                 for sensor_port in ["D", "E", "F"]:
@@ -44,7 +44,7 @@ def load_config():
                     if search_str in content:
                         config["sensors"]["distance"] = sensor_port
                         break
-            
+
             # Force sensor
             if '"force"' in content:
                 for sensor_port in ["D", "E", "F"]:
@@ -52,7 +52,7 @@ def load_config():
                     if search_str in content:
                         config["sensors"]["force"] = sensor_port
                         break
-            
+
             # Color sensor
             if '"color"' in content:
                 for sensor_port in ["D", "E", "F"]:
@@ -60,7 +60,7 @@ def load_config():
                     if search_str in content:
                         config["sensors"]["color"] = sensor_port
                         break
-            
+
             print("Config loaded")
             return config
     except Exception as e:
@@ -78,13 +78,13 @@ def load_config():
 def generate_header(config):
     """Generate CSV header based on config"""
     fields = ["time_ms"]
-    
+
     # Motors
     for port in ["A", "B", "C", "D", "E", "F"]:
         if port in config.get("motors", {}):
             fields.append(f"motor{port}_rel_deg")
             fields.append(f"motor{port}_abs_deg")
-    
+
     # Sensors
     sensors = config.get("sensors", {})
     if sensors.get("distance"):
@@ -93,10 +93,10 @@ def generate_header(config):
         fields.append(f"force_{sensors['force']}_N")
     if sensors.get("color"):
         fields.append(f"color_{sensors['color']}")
-    
+
     # IMU
     fields.extend(["yaw_deg", "pitch_deg", "roll_deg"])
-    
+
     return ",".join(fields)
 
 # ============================================================
@@ -133,14 +133,14 @@ async def collect_data():
     global recording, header_sent
     f = None
     start_time = time.ticks_ms()
-    
+
     try:
         # Remove old file if exists
         try:
             os.remove(CSV_PATH)
         except:
             pass
-        
+
         f = open(CSV_PATH, "w")
     except Exception as e:
         print(f"File open error: {e}")
@@ -156,14 +156,14 @@ async def collect_data():
                     f.write(header + "\n")
                     f.flush()
                     print(header)
-                    
+
                     # Reset motor positions
                     for port_letter in config["motors"].keys():
                         try:
                             motor.reset_relative_position(PORT_MAP[port_letter], 0)
                         except:
                             pass
-                    
+
                     start_time = time.ticks_ms()
                     header_sent = True
 
@@ -184,7 +184,7 @@ async def collect_data():
 
                 # Sensor data
                 sensors = config.get("sensors", {})
-                
+
                 if sensors.get("distance"):
                     try:
                         port_obj = PORT_MAP[sensors["distance"]]
@@ -219,7 +219,7 @@ async def collect_data():
                 f.write(data_line)
                 f.flush()
 
-                await runloop.sleep_ms(150)
+                await runloop.sleep_ms(30)
             else:
                 if header_sent and not recording:
                     break
