@@ -1,6 +1,9 @@
-# ============================================================
+"""
 # movement_analysis.py - Vector Kinematics Movement Classification
-# ============================================================
+
+Course: ICS4U
+Summary:
+"""
 
 import csv
 import os
