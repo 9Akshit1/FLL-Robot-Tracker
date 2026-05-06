@@ -15,9 +15,17 @@ PORT_MAP = {
     "D": port.D, "E": port.E, "F": port.F,
 }
 
-# config loading
+"""
+Load robot config from hub (simplified JSON parsing)
+
+Args:
+- 
+
+Returns:
+- config
+
+"""
 def load_config():
-    """Load robot config from hub (simplified JSON parsing)"""
     try:
         with open("/flash/robot_config.json", "r") as f:
             content = f.read()
@@ -68,7 +76,16 @@ def load_config():
             "sensors": {"distance": "D"}
         }
 
-# Header Generation
+"""
+Header Generation
+
+Args:
+- config
+
+Returns:
+- Comma-seperated data
+
+"""
 def generate_header(config):
     """Generate CSV header based on config"""
     fields = ["time_ms"]
