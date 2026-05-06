@@ -1,4 +1,11 @@
-# collect_data_2_0.py - FLL Robot Data Logger 2.0
+"""
+collect_data_2_0.py - FLL Robot Data Logger 2.0
+ICS3UE
+
+Summary:
+
+"""
+
 
 import motor
 import force_sensor
