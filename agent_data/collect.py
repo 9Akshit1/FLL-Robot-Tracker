@@ -1,4 +1,6 @@
-# collect_data_2_0.py - FLL Robot Data Logger v2.0
+# collect_data_2_0_FIXED.py - FLL Robot Data Logger v2.0 FIXED
+# Uses motor.absolute_position() instead of relative_position()
+# This fixes the position drift issue
 
 import motor
 import force_sensor
@@ -32,7 +34,7 @@ def load_config():
             # Check which motors are configured
             for motor_letter in ["A", "B", "C"]:
                 if f'"{motor_letter}"' in content:
-                    config["motors"][motor_letter] = motor_letter  # Mark as enabled
+                    config["motors"][motor_letter] = motor_letter
 
             # Parse sensors
             config["sensors"] = {}
@@ -79,11 +81,11 @@ def generate_header(config):
     """Generate CSV header based on config"""
     fields = ["time_ms"]
 
-    # Motors
+    # Motors - FIXED: Use absolute position for reliability
     for port in ["A", "B", "C", "D", "E", "F"]:
         if port in config.get("motors", {}):
-            fields.append(f"motor{port}_rel_deg")
-            fields.append(f"motor{port}_abs_deg")
+            fields.append(f"motor{port}_abs_deg")  # ← CHANGED: Use absolute
+            fields.append(f"motor{port}_rel_deg")  # ← Still collect for reference
 
     # Sensors
     sensors = config.get("sensors", {})
@@ -133,6 +135,9 @@ async def collect_data():
     global recording, header_sent
     f = None
     start_time = time.ticks_ms()
+    
+    # Store starting absolute positions for calculating relative positions
+    starting_abs_position = {}
 
     try:
         # Remove old file if exists
@@ -157,12 +162,18 @@ async def collect_data():
                     f.flush()
                     print(header)
 
-                    # Reset motor positions
+                    # Store starting absolute positions
+                    # These are used to calculate relative positions
                     for port_letter in config["motors"].keys():
                         try:
-                            motor.reset_relative_position(PORT_MAP[port_letter], 0)
+                            abs_pos = safe_read(
+                                lambda p=PORT_MAP[port_letter]: motor.absolute_position(p),
+                                0
+                            )
+                            starting_abs_position[port_letter] = abs_pos
+                            print(f"Motor {port_letter} starting position: {abs_pos}")
                         except:
-                            pass
+                            starting_abs_position[port_letter] = 0
 
                     start_time = time.ticks_ms()
                     header_sent = True
@@ -171,14 +182,19 @@ async def collect_data():
                 t = time.ticks_ms() - start_time
                 data_line = str(t)
 
-                # Motor data
+                # Motor data - FIXED: Use absolute position as primary
                 for port in ["A", "B", "C", "D", "E", "F"]:
                     if port in config.get("motors", {}):
                         try:
                             port_obj = PORT_MAP[port]
-                            rel = safe_read(lambda p=port_obj: motor.relative_position(p), 0)
+                            
+                            # PRIMARY: Use absolute position (reliable)
                             abs_pos = safe_read(lambda p=port_obj: motor.absolute_position(p), 0)
-                            data_line += f",{int(rel)},{int(abs_pos)}"
+                            
+                            # SECONDARY: Calculate relative from absolute
+                            rel_pos = abs_pos - starting_abs_position.get(port, 0)
+                            
+                            data_line += f",{int(abs_pos)},{int(rel_pos)}"
                         except:
                             data_line += ",0,0"
 
@@ -240,7 +256,8 @@ async def collect_data():
 # ============================================================
 
 light_matrix.write("RDY")
-print("FLL Robot Logger v2.0")
+print("FLL Robot Logger v2.0 FIXED")
+print("Using absolute_position() for accurate tracking")
 print(f"Motors: {list(config['motors'].keys())}")
 print(f"Ready to record")
 

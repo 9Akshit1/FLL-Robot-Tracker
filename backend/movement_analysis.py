@@ -1,390 +1,258 @@
+#!/usr/bin/env python3
 """
-# movement_analysis.py - Vector Kinematics Movement Classification
-
-Course: ICS4U
-Summary:
+Movement Analysis - FINAL VERSION
+- Has run() function for dashboard
+- Merges consecutive idle segments
+- Classifies combined movements (Drive + Arm)
+- Ignores minor turns (turn_ratio < 0.2)
 """
 
 import csv
-import os
-from typing import List, Dict, Tuple, Set
-from pathlib import Path
 import json
-import math
+from pathlib import Path
+from collections import defaultdict
 
-class DataPoint:
-    """
-    Single data sample from robot sensors
-    """
-    def __init__(self, data_dict):
-        self.t = float(data_dict.get("time_ms", 0))
-        
-        # Motor data
-        self.motors = {}
-        for key, val in data_dict.items():
-            if "_rel_deg" in key or "_abs_deg" in key:
-                try:
-                    self.motors[key] = float(val)
-                except (ValueError, TypeError):
-                    self.motors[key] = 0.0
-        
-        # Sensor data
-        self.sensors = {}
-        for key, val in data_dict.items():
-            if "_mm" in key or "_N" in key:
-                try:
-                    self.sensors[key] = float(val)
-                except (ValueError, TypeError):
-                    self.sensors[key] = 0.0
-        
-        # IMU
-        self.yaw = float(data_dict.get("yaw_deg", 0))
-        self.pitch = float(data_dict.get("pitch_deg", 0))
-        self.roll = float(data_dict.get("roll_deg", 0))
-
-def load_data(csv_path):
-    """Load CSV into DataPoint objects"""
-    data = []
-    with open(csv_path, encoding="utf-8", errors="ignore") as f:
+def load_csv_data(csv_path):
+    """Load motor data from CSV"""
+    frames = []
+    with open(csv_path, 'r', encoding='utf-8', errors='ignore') as f:
         reader = csv.DictReader(f)
-        reader.fieldnames = [name.replace("\ufeff", "").strip() for name in reader.fieldnames]
-        
-        for r in reader:
-            if not r.get("time_ms") or str(r.get("time_ms", "")).startswith("#"):
-                continue
-            
+        for row in reader:
             try:
-                data.append(DataPoint(r))
-            except (ValueError, TypeError, KeyError):
-                continue
-    
-    return data
-
-def unwrap_angles(deg_list):
-    """Unwrap angular values across 360 degree boundaries"""
-    if not deg_list:
-        return []
-    unwrapped = [deg_list[0]]
-    offset = 0
-    for i in range(1, len(deg_list)):
-        delta = deg_list[i] - deg_list[i - 1]
-        if delta > 180:
-            offset -= 360
-        elif delta < -180:
-            offset += 360
-        unwrapped.append(deg_list[i] + offset)
-    return unwrapped
-
-# ============================================================
-# VECTOR KINEMATICS ANALYSIS
-# ============================================================
-
-class KinematicState:
-    """Represents motion state at a moment in time with multi-label support"""
-    def __init__(self, t_ms):
-        self.t = t_ms
-        
-        # Drive motors velocities (deg/sec)
-        self.left_vel = 0.0
-        self.right_vel = 0.0
-        
-        # Individual attachment motor velocities
-        self.attachment_vels = {}  # port -> velocity
-        
-        # Derived kinematics
-        self.linear_vel = 0.0      # forward speed
-        self.angular_vel = 0.0     # rotation speed (deg/sec)
-        self.left_power = 0.0      # normalized 0-1
-        self.right_power = 0.0     # normalized 0-1
-        
-        # Multi-label classification
-        self.actions = set()  # Set of concurrent actions
-    
-    def classify(self):
-        """Classify what actions are happening RIGHT NOW"""
-        self.actions = set()
-        
-        # Thresholds for motion detection
-        LINEAR_THRESH = 10.0        # deg/sec
-        ANGULAR_THRESH = 8.0        # deg/sec
-        ATTACHMENT_THRESH = 15.0    # deg/sec
-        
-        # Calculate linear and angular velocity
-        if abs(self.left_vel) > 0.1 or abs(self.right_vel) > 0.1:
-            self.linear_vel = (self.left_vel + self.right_vel) / 2.0
-            self.angular_vel = (self.right_vel - self.left_vel) / 2.0  # Differential drive
-        
-        # Multi-label classification - actions can overlap
-        
-        # 1. DRIVE CLASSIFICATION (forward/backward)
-        if abs(self.linear_vel) > LINEAR_THRESH:
-            if self.linear_vel > 0:
-                self.actions.add("driving_forward")
-            else:
-                self.actions.add("driving_backward")
-        
-        # 2. TURN CLASSIFICATION (left/right)
-        if abs(self.angular_vel) > ANGULAR_THRESH:
-            if self.angular_vel > 0:
-                self.actions.add("turning_left")
-            else:
-                self.actions.add("turning_right")
-        
-        # 3. ATTACHMENT CLASSIFICATION (for each motor independently)
-        for port, vel in self.attachment_vels.items():
-            if abs(vel) > ATTACHMENT_THRESH:
-                if vel > 0:
-                    self.actions.add(f"attachment_{port}_up")
-                else:
-                    self.actions.add(f"attachment_{port}_down")
-        
-        # Default if no motion
-        if not self.actions:
-            self.actions.add("idle")
-        
-        return self.actions
-
-def compute_kinematics(data: List[DataPoint], config=None) -> List[KinematicState]:
-    """
-    Compute kinematic state at each time point using vector analysis
-    """
-    if len(data) < 2:
-        return []
-    
-    states = []
-    
-    # Identify drive motors from config
-    left_motor = None
-    right_motor = None
-    attachment_motors = []
-    
-    if config and "motors" in config:
-        for port, role in config["motors"].items():
-            if role == "left_drive":
-                left_motor = port
-            elif role == "right_drive":
-                right_motor = port
-            elif role == "attachment":
-                attachment_motors.append(port)
-    
-    # Fallback
-    if not left_motor or not right_motor:
-        left_motor = "A"
-        right_motor = "B"
-    
-    yaw_unwrapped = unwrap_angles([d.yaw for d in data])
-    
-    for i in range(len(data)):
-        state = KinematicState(data[i].t)
-        
-        if i == 0:
-            # First point - no velocity yet
-            state.left_vel = 0
-            state.right_vel = 0
-        else:
-            dt_sec = (data[i].t - data[i-1].t) / 1000.0
-            if dt_sec > 0:
-                # Compute motor velocities (deg/sec)
-                # Try multiple key formats in case column naming varies
-                left_vel = 0
-                right_vel = 0
+                time_ms = int(float(row.get('time_ms', 0)))
+                motors = {}
+                for port in ['A', 'B', 'C']:
+                    rel_key = f'motor{port}_rel_deg'
+                    motors[port] = float(row.get(rel_key, 0))
                 
-                # Try different left motor key formats
-                for left_key in [
-                    f"motor{left_motor}_rel_deg",
-                    f"motor_{left_motor}_rel_deg",
-                    f"motorA_rel_deg" if left_motor.upper() == "A" else None,
-                    f"motor_A_rel_deg" if left_motor.upper() == "A" else None,
-                ]:
-                    if left_key and left_key in data[i].motors and left_key in data[i-1].motors:
-                        left_delta = data[i].motors[left_key] - data[i-1].motors[left_key]
-                        left_vel = left_delta / dt_sec
-                        break
-                
-                # Try different right motor key formats
-                for right_key in [
-                    f"motor{right_motor}_rel_deg",
-                    f"motor_{right_motor}_rel_deg",
-                    f"motorB_rel_deg" if right_motor.upper() == "B" else None,
-                    f"motor_B_rel_deg" if right_motor.upper() == "B" else None,
-                ]:
-                    if right_key and right_key in data[i].motors and right_key in data[i-1].motors:
-                        right_delta = data[i].motors[right_key] - data[i-1].motors[right_key]
-                        right_vel = right_delta / dt_sec
-                        break
-                
-                state.left_vel = left_vel
-                state.right_vel = right_vel
-                
-                # Attachment motor velocities
-                for port in attachment_motors:
-                    att_key = f"motor{port}_rel_deg"
-                    if att_key in data[i].motors and att_key in data[i-1].motors:
-                        att_delta = data[i].motors[att_key] - data[i-1].motors[att_key]
-                        state.attachment_vels[port] = att_delta / dt_sec
-            
-            # Power levels (normalized 0-1 based on velocity)
-            MAX_VEL = 180.0  # deg/sec max
-            state.left_power = min(1.0, abs(state.left_vel) / MAX_VEL)
-            state.right_power = min(1.0, abs(state.right_vel) / MAX_VEL)
+                frames.append({
+                    'time_ms': time_ms,
+                    'motors': motors
+                })
+            except:
+                pass
+    return frames
+
+def calculate_velocities(frames):
+    """Calculate motor velocities (degrees per second)"""
+    velocities = []
+    
+    for i in range(1, len(frames)):
+        curr = frames[i]
+        prev = frames[i-1]
+        dt_ms = max(1, curr['time_ms'] - prev['time_ms'])
         
-        # Classify actions at this moment
-        state.classify()
-        states.append(state)
+        frame_vel = {}
+        for port in ['A', 'B', 'C']:
+            delta = curr['motors'][port] - prev['motors'][port]
+            vel_deg_per_sec = abs(delta) / (dt_ms / 1000.0)
+            frame_vel[port] = vel_deg_per_sec
+        
+        velocities.append(frame_vel)
     
-    return states
+    return velocities
 
-# ============================================================
-# SEGMENT GENERATION - Merge consecutive similar states
-# ============================================================
-
-def generate_segments(states: List[KinematicState], min_duration_ms=150) -> List[Dict]:
-    """
-    Convert kinematic states into segments where action set remains constant
-    """
-    if not states:
-        return []
-    
+def segment_movements(frames, velocities, velocity_threshold=2.0):
+    """Segment movements based on velocity changes"""
     segments = []
-    current_actions = states[0].actions
-    start_idx = 0
-    start_time = states[0].t
+    current_segment = None
     
-    for i in range(1, len(states)):
-        # Check if action set changed
-        if states[i].actions != current_actions:
-            # Save current segment
-            duration = states[i].t - start_time
-            
-            if duration >= min_duration_ms:
-                # Compute average metrics for segment
-                segment_states = states[start_idx:i]
-                avg_linear = sum(s.linear_vel for s in segment_states) / len(segment_states)
-                avg_angular = sum(s.angular_vel for s in segment_states) / len(segment_states)
-                
-                segment = {
-                    'start_ms': start_time,
-                    'end_ms': states[i].t,
-                    'duration_ms': duration,
-                    'actions': sorted(list(current_actions)),  # Sorted for consistency
-                    'avg_linear_vel': round(avg_linear, 2),
-                    'avg_angular_vel': round(avg_angular, 2),
-                    'description': format_segment_description(current_actions)
-                }
-                segments.append(segment)
-            
-            # Start new segment
-            current_actions = states[i].actions
-            start_idx = i
-            start_time = states[i].t
-    
-    # Add final segment
-    if len(states) > start_idx:
-        duration = states[-1].t - start_time
-        if duration >= min_duration_ms:
-            segment_states = states[start_idx:]
-            avg_linear = sum(s.linear_vel for s in segment_states) / len(segment_states)
-            avg_angular = sum(s.angular_vel for s in segment_states) / len(segment_states)
-            
-            segment = {
-                'start_ms': start_time,
-                'end_ms': states[-1].t,
-                'duration_ms': duration,
-                'actions': sorted(list(current_actions)),
-                'avg_linear_vel': round(avg_linear, 2),
-                'avg_angular_vel': round(avg_angular, 2),
-                'description': format_segment_description(current_actions)
+    for i in range(len(velocities)):
+        frame_idx = i + 1
+        frame = frames[frame_idx]
+        vel = velocities[i]
+        
+        is_moving = any(v > velocity_threshold for v in vel.values())
+        
+        if not current_segment:
+            current_segment = {
+                'start_idx': frame_idx,
+                'start_ms': frame['time_ms'],
+                'is_moving': is_moving,
+                'motors': defaultdict(list)
             }
-            segments.append(segment)
+        
+        for port in ['A', 'B', 'C']:
+            if vel[port] > velocity_threshold:
+                current_segment['motors'][port].append(vel[port])
+        
+        if is_moving != current_segment['is_moving']:
+            current_segment['end_idx'] = frame_idx
+            current_segment['end_ms'] = frame['time_ms']
+            segments.append(current_segment)
+            
+            current_segment = {
+                'start_idx': frame_idx,
+                'start_ms': frame['time_ms'],
+                'is_moving': is_moving,
+                'motors': defaultdict(list)
+            }
+        else:
+            current_segment['end_idx'] = frame_idx
+            current_segment['end_ms'] = frame['time_ms']
+    
+    if current_segment and current_segment['end_ms'] > current_segment['start_ms']:
+        segments.append(current_segment)
     
     return segments
 
-def format_segment_description(actions: Set[str]) -> str:
-    """Create human-readable description of action set"""
-    if "idle" in actions:
+def classify_segment(segment):
+    """
+    IMPROVED: Classify segment with combined movements
+    Can output: "Drive Forward + Raise Arm", "Turn Left + Lower Arm", etc.
+    """
+    motor_a_vel = sum(segment.get('motors', {}).get('A', []))
+    motor_b_vel = sum(segment.get('motors', {}).get('B', []))
+    motor_c_vel = sum(segment.get('motors', {}).get('C', []))
+    
+    # Thresholds
+    drive_threshold = 50    # Need 50+ deg/sec combined to count as driving
+    arm_threshold = 30      # Need 30+ deg/sec to count as arm movement
+    
+    # Check what's moving significantly
+    has_drive = (abs(motor_a_vel) + abs(motor_b_vel)) > drive_threshold
+    has_arm = abs(motor_c_vel) > arm_threshold
+    
+    if not has_drive and not has_arm:
         return "Idle"
     
-    description_parts = []
+    # Classify drive direction
+    drive_desc = None
+    if has_drive:
+        a_mag = abs(motor_a_vel)
+        b_mag = abs(motor_b_vel)
+        total_drive = a_mag + b_mag
+        
+        # Check turn ratio
+        diff = abs(a_mag - b_mag)
+        turn_ratio = diff / total_drive if total_drive > 0 else 0
+        
+        # Only label as turn if >20% difference
+        if turn_ratio < 0.2:
+            # Straight movement - determine forward or backward
+            # Check first velocity direction
+            first_a = segment.get('motors', {}).get('A', [None])[0]
+            first_b = segment.get('motors', {}).get('B', [None])[0]
+            
+            if first_a is not None and first_a > 0:
+                drive_desc = "Drive Backward"  # A forward = backward direction (convention)
+            elif first_b is not None and first_b > 0:
+                drive_desc = "Drive Backward"
+            else:
+                drive_desc = "Drive Forward"
+        else:
+            # Significant turn
+            drive_desc = "Turn Left" if a_mag > b_mag else "Turn Right"
     
-    # Main motion
-    if "driving_forward" in actions:
-        description_parts.append("Drive Forward")
-    elif "driving_backward" in actions:
-        description_parts.append("Drive Backward")
+    # Classify arm direction
+    arm_desc = None
+    if has_arm:
+        if motor_c_vel > 0:
+            arm_desc = "Raise Arm"
+        else:
+            arm_desc = "Lower Arm"
     
-    # Rotation
-    if "turning_left" in actions:
-        description_parts.append("Turn Left")
-    elif "turning_right" in actions:
-        description_parts.append("Turn Right")
-    
-    # Attachments
-    for action in sorted(actions):
-        if "attachment" in action:
-            if "up" in action:
-                port = action.split("_")[1]
-                description_parts.append(f"Raise {port}")
-            elif "down" in action:
-                port = action.split("_")[1]
-                description_parts.append(f"Lower {port}")
-    
-    return " + ".join(description_parts) if description_parts else "Unknown"
+    # Combine classifications
+    if drive_desc and arm_desc:
+        return f"{drive_desc} + {arm_desc}"
+    elif drive_desc:
+        return drive_desc
+    elif arm_desc:
+        return arm_desc
+    else:
+        return "Idle"
 
-# ============================================================
-# MAIN ANALYSIS FUNCTION
-# ============================================================
+def merge_consecutive_idle_segments(segments):
+    """Merge consecutive idle segments into single segments"""
+    if not segments:
+        return segments
+    
+    merged = []
+    current = None
+    
+    for seg in segments:
+        if current is None:
+            current = seg.copy()
+        elif seg['description'] == 'Idle' and current['description'] == 'Idle':
+            # Extend current segment
+            current['end_ms'] = seg['end_ms']
+            current['duration_ms'] = current['end_ms'] - current['start_ms']
+        else:
+            # Save and start new
+            merged.append(current)
+            current = seg.copy()
+    
+    if current:
+        merged.append(current)
+    
+    return merged
 
-def run(csv_path, config=None):
+def run(csv_path='backend/data/raw_data.csv', output_path='backend/data/segments.json'):
     """
-    Analyze movement with proper vector kinematics
-    
-    Returns:
-        tuple: (segments, kinematic_summary)
+    MAIN FUNCTION - Called by dashboard
+    Analyzes CSV and generates segments.json
     """
-    print("\nLoading data...")
-    data = load_data(csv_path)
+    csv_file = Path(csv_path)
     
-    if not data:
-        return [], {}
+    if not csv_file.exists():
+        print(f"ERROR: {csv_file} not found")
+        return False
     
-    print("Computing kinematics...")
-    states = compute_kinematics(data, config)
+    print(f"[*] Loading CSV: {csv_file}")
+    frames = load_csv_data(str(csv_file))
+    print(f"[OK] Loaded {len(frames)} frames")
     
-    print("Generating segments...")
-    segments = generate_segments(states)
+    if len(frames) < 2:
+        print("[ERROR] Not enough frames")
+        return False
     
-    # Compute summary statistics
-    summary = {
-        'total_time_ms': data[-1].t if data else 0,
-        'total_segments': len(segments),
-        'avg_segment_duration': round(sum(s['duration_ms'] for s in segments) / len(segments), 1) if segments else 0,
-        'unique_actions': set(),
-    }
+    print("[*] Calculating velocities...")
+    velocities = calculate_velocities(frames)
     
-    for segment in segments:
-        summary['unique_actions'].update(segment['actions'])
+    print("[*] Segmenting movements...")
+    segments = segment_movements(frames, velocities)
+    print(f"[OK] Found {len(segments)} raw segments")
     
-    summary['unique_actions'] = sorted(list(summary['unique_actions']))
+    print("[*] Classifying segments...")
+    segments_with_desc = []
+    for i, seg in enumerate(segments, 1):
+        description = classify_segment(seg)
+        duration_ms = seg['end_ms'] - seg['start_ms']
+        
+        segments_with_desc.append({
+            'index': i,
+            'description': description,
+            'start_ms': seg['start_ms'],
+            'end_ms': seg['end_ms'],
+            'duration_ms': duration_ms
+        })
     
-    return segments, summary
-
-# ============================================================
-# MAIN (for testing)
-# ============================================================
+    print(f"[OK] Classified {len(segments_with_desc)} segments")
+    
+    print("[*] Merging consecutive idle segments...")
+    segments_merged = merge_consecutive_idle_segments(segments_with_desc)
+    print(f"[OK] After merge: {len(segments_merged)} segments")
+    
+    # Re-index after merge
+    for i, seg in enumerate(segments_merged, 1):
+        seg['index'] = i
+    
+    # Display results
+    print("\n" + "=" * 90)
+    print("MOVEMENT SEGMENTS:")
+    print("=" * 90)
+    for seg in segments_merged:
+        print(f"[{seg['index']:2d}] {seg['description']:40s} {seg['start_ms']:5d}ms - {seg['end_ms']:5d}ms ({seg['duration_ms']:4d}ms)")
+    print("=" * 90)
+    
+    # Save to JSON
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(segments_merged, f, indent=2)
+    print(f"[OK] Saved to {output_file}\n")
+    
+    return True
 
 if __name__ == "__main__":
-    INPUT_FILE = Path("backend/data/raw_data.csv")
-    
-    segments, summary = run(str(INPUT_FILE))
-    
-    print("\n=== Movement Analysis Results ===")
-    print(f"Total time: {summary['total_time_ms']}ms")
-    print(f"Total segments: {summary['total_segments']}")
-    print(f"Unique actions: {summary['unique_actions']}")
-    
-    print("\nSegments:")
-    for seg in segments:
-        print(f"[{seg['start_ms']:.0f} - {seg['end_ms']:.0f}] ({seg['duration_ms']:.0f}ms)")
-        print(f"  Actions: {', '.join(seg['actions'])}")
-        print(f"  Description: {seg['description']}")
-        print(f"  Linear: {seg['avg_linear_vel']:.1f} deg/s, Angular: {seg['avg_angular_vel']:.1f} deg/s")
+    run()

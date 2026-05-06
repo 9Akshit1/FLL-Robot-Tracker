@@ -1,68 +1,33 @@
 #!/usr/bin/env python3
+"""
+FLL Robot Tracker - Local Agent
+Ready for PyInstaller compilation to EXE
+
+Changes from original:
+- Removed bootstrap/venv logic (not needed in EXE)
+- Changed all mpremote calls to use sys.executable -m mpremote
+- Cleaned up path detection (not needed in EXE)
+"""
 
 import os
 import sys
 import subprocess
-import shutil  # Added for path detection
-
-# --- SELF-BOOTSTRAP LOGIC ---
-def bootstrap():
-    venv_dir = os.path.join(os.getcwd(), "venv")
-    
-    # Check if we are already running inside the venv
-    is_venv = sys.prefix != sys.base_prefix
-    
-    if not is_venv:
-        if not os.path.exists(venv_dir):
-            print("First time setup: Creating virtual environment...")
-            subprocess.check_call([sys.executable, "-m", "venv", "venv"])
-            
-            # Determine pip path
-            pip_bin = os.path.join(venv_dir, "Scripts", "pip") if os.name == 'nt' else os.path.join(venv_dir, "bin", "pip")
-            
-            print("Installing dependencies (flask, pyserial, mpremote)...")
-            subprocess.check_call([pip_bin, "install", "flask", "pyserial", "mpremote"])
-            
-            print("\n" + "="*50)
-            print("SETUP COMPLETE!")
-            if os.name == 'nt':
-                print("To start the agent, run: venv\\Scripts\\python local_agent.py")
-            else:
-                print("To start the agent, run: ./venv/bin/python local_agent.py")
-            print("="*50)
-            sys.exit(0)
-        else:
-            # Venv exists but user isn't using it
-            print("Please run the agent using the virtual environment:")
-            if os.name == 'nt':
-                print("venv\\Scripts\\python local_agent.py")
-            else:
-                print("./venv/bin/python local_agent.py")
-            sys.exit(0)
-
-# Run bootstrap before other imports
-bootstrap()
-
-# --- AGENT LOGIC (FLASK) ---
-from flask import Flask, request, jsonify
-from pathlib import Path
 import json
 import time
 import logging
+from pathlib import Path
+from flask import Flask, request, jsonify
 from datetime import datetime
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
-# Get COM port from environment or default
 COM_PORT = os.getenv("COM_PORT", "COM3")
 
-# Local storage for agent data
 AGENT_DATA_DIR = Path("./agent_data")
 AGENT_DATA_DIR.mkdir(exist_ok=True)
 
-# Logging
 LOG_DIR = AGENT_DATA_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -86,25 +51,6 @@ app = Flask(__name__)
 # CORS SUPPORT
 # ============================================================
 
-def get_mpremote_path():
-    """Locate the mpremote executable within the current environment"""
-    # 1. Try finding in the current PATH (preferred for venv)
-    path = shutil.which("mpremote")
-    if path:
-        return path
-    
-    # 2. If not in PATH, look relative to the current Python executable
-    python_dir = os.path.dirname(sys.executable)
-    if os.name == 'nt':
-        path = os.path.join(python_dir, "Scripts", "mpremote.exe")
-    else:
-        path = os.path.join(python_dir, "bin", "mpremote")
-        
-    if os.path.exists(path):
-        return path
-    return None
-
-# Enable CORS headers for all requests
 @app.after_request
 def add_cors_headers(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -125,12 +71,7 @@ def handle_options(path):
 # ============================================================
 
 def detect_serial_ports():
-    """
-    Detect available serial ports on this computer
-    
-    Returns:
-        list: List of port dicts with 'port' and 'description'
-    """
+    """Detect available serial ports"""
     try:
         import serial.tools.list_ports
         ports = []
@@ -142,10 +83,9 @@ def detect_serial_ports():
         return ports
     except Exception as e:
         logger.warning(f"Could not detect ports: {e}")
-        # Fallback: return common ports
-        if os.name == 'nt':  # Windows
+        if os.name == 'nt':
             return [{"port": f"COM{i}", "description": "Potential Serial Port"} for i in range(1, 10)]
-        else:  # Mac/Linux
+        else:
             return [{"port": f"/dev/ttyUSB{i}", "description": "Potential Serial Port"} for i in range(5)]
 
 # ============================================================
@@ -154,21 +94,7 @@ def detect_serial_ports():
 
 @app.route("/agent/detect_ports")
 def detect_ports():
-    """
-    Detect available serial ports on this computer
-    
-    The web app calls this to get a list of ports.
-    User can then select which port to use.
-    
-    Returns:
-        {
-            "status": "success",
-            "ports": [
-                {"port": "COM3", "description": "Silicon Labs CP210x..."},
-                {"port": "COM4", "description": "USB Serial Device"}
-            ]
-        }
-    """
+    """Detect available serial ports"""
     logger.info("Port detection requested")
     
     try:
@@ -211,103 +137,22 @@ def agent_info():
     """Get agent information"""
     return jsonify({
         "agent": "FLL Robot Tracker - Local Agent",
-        "version": "1.0",
+        "version": "2.0",
         "data_dir": str(AGENT_DATA_DIR),
         "status": "running"
     })
 
 # ============================================================
-# HELPER FUNCTION FOR ROBOT COMMUNICATION
+# CONNECTION ENDPOINT
 # ============================================================
-
-def run_mpremote(args, timeout=10):
-    """
-    Run mpremote command
-    
-    Args:
-        args: List of mpremote arguments
-        timeout: Command timeout in seconds
-    
-    Returns:
-        CompletedProcess or None on error
-    """
-    try:
-        cmd = ["mpremote", "connect", COM_PORT] + args
-        logger.info(f"Running: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return result
-    except subprocess.TimeoutExpired:
-        logger.error(f"Command timeout: {args}")
-        return None
-    except Exception as e:
-        logger.error(f"Command error: {e}")
-        return None
-
-@app.route("/agent/status")
-def status():
-    """Check agent status and robot connection"""
-    logger.info("Status check requested")
-    
-    # Try to ping robot
-    try:
-        cmd = ["mpremote", "connect", COM_PORT, "--help"]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-        
-        if result.returncode == 0:
-            return jsonify({
-                "status": "connected",
-                "com_port": COM_PORT,
-                "message": "Robot connected"
-            })
-        else:
-            logger.warning("Robot not detected")
-            return jsonify({
-                "status": "disconnected",
-                "com_port": COM_PORT,
-                "message": "Robot not detected on port"
-            })
-    except Exception as e:
-        logger.warning(f"Status check failed: {e}")
-        return jsonify({
-            "status": "disconnected",
-            "com_port": COM_PORT,
-            "message": str(e)
-        })
 
 @app.route("/agent/connect", methods=["POST"])
 def agent_connect():
-    """
-    Upload and execute the collection script on robot
-    
-    Expects JSON:
-        {
-            "script_content": "import motor\n...",
-            "com_port": "COM3"
-        }
-    
-    Flow:
-        1. Receive script content from server
-        2. Save to local agent_data folder
-        3. Upload to robot using mpremote
-        4. Execute on robot to record motion data
-        5. Return status
-    
-    Returns:
-        {
-            "status": "success",
-            "message": "Recording complete",
-            "output": "..."
-        }
-    """
-    logger.info("Connect request received")
-    
+    """Upload and execute data collection script"""
     try:
-        data = request.get_json()
-        if not data:
-            logger.error("No JSON data received")
-            return jsonify({"error": "No JSON data"}), 400
+        logger.info("Connect request received")
         
-        # Get script content - accept both field names for flexibility
+        data = request.get_json()
         script_content = data.get("script_content") or data.get("script")
         selected_port = data.get("com_port", COM_PORT)
         
@@ -317,14 +162,14 @@ def agent_connect():
         
         logger.info(f"Received collection script ({len(script_content)} bytes)")
         
-        # Save script locally for reference and upload
+        # FIXED: UTF-8 encoding
         script_path = AGENT_DATA_DIR / "collect.py"
-        script_path.write_text(script_content)
+        script_path.write_text(script_content, encoding='utf-8')
         logger.info(f"Saved collection script to {script_path}")
         
-        # Step 1: Upload collection script to robot as main.py
-        logger.info(f"Uploading collection script to {selected_port}...")
-        cmd = ["mpremote", "connect", selected_port, "cp", str(script_path.absolute()), ":main.py"]
+        # Upload to robot
+        logger.info(f"Uploading to {selected_port}...")
+        cmd = [sys.executable, "-m", "mpremote", "connect", selected_port, "cp", str(script_path.absolute()), ":main.py"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         
         if result.returncode != 0:
@@ -335,22 +180,28 @@ def agent_connect():
         logger.info("Script uploaded successfully")
         time.sleep(1)
         
-        # Step 2: Execute script on robot (will record data and write CSV)
-        logger.info(f"Executing collection script on {selected_port}...")
-        cmd = ["mpremote", "connect", selected_port, "exec", "exec(open('main.py').read())"]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        # Execute on robot
+        logger.info(f"Executing on {selected_port}...")
+        cmd = [sys.executable, "-m", "mpremote", "connect", selected_port, "exec", "exec(open('main.py').read())"]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
         
-        if result.returncode == 0:
-            logger.info("Recording complete")
+        if result.returncode != 0:
+            error_msg = result.stderr if result.stderr else "Unknown error"
+            logger.error(f"Execution failed: {error_msg}")
             return jsonify({
-                "status": "success",
-                "message": "Recording complete",
-                "output": result.stdout if result.stdout else "Script executed successfully"
-            })
-        else:
-            error = result.stderr if result else "Unknown error"
-            logger.error(f"Execution failed: {error}")
-            return jsonify({"error": f"Execution failed: {error[:100]}"}), 500
+                "status": "warning",
+                "message": "Script uploaded but execution may have failed",
+                "error": error_msg[:200],
+                "path": str(script_path)
+            }), 200
+        
+        logger.info("Collection script executed successfully")
+        
+        return jsonify({
+            "status": "success",
+            "message": "Collection script uploaded and executed",
+            "path": str(script_path)
+        }), 200
     
     except Exception as e:
         logger.error(f"Connect failed: {e}", exc_info=True)
@@ -358,19 +209,7 @@ def agent_connect():
 
 @app.route("/agent/pull", methods=["GET", "POST"])
 def agent_pull():
-    """
-    Pull CSV data from robot
-    
-    Expects JSON:
-        {"com_port": "COM3"}
-    
-    Returns:
-        {
-            "status": "success",
-            "csv_size": 4096,
-            "csv_content": "time_ms,motorA_rel_deg,...\n..."
-        }
-    """
+    """Pull CSV data from robot"""
     logger.info("Pull CSV request received")
     
     try:
@@ -380,7 +219,7 @@ def agent_pull():
         csv_path = AGENT_DATA_DIR / "data_log.csv"
         
         logger.info(f"Pulling CSV from {selected_port}...")
-        cmd = ["mpremote", "connect", selected_port, "cp", ":data_log.csv", str(csv_path.absolute())]
+        cmd = [sys.executable, "-m", "mpremote", "connect", selected_port, "cp", ":data_log.csv", str(csv_path.absolute())]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         
         if result.returncode != 0:
@@ -392,6 +231,7 @@ def agent_pull():
             logger.error("CSV file not found after pull")
             return jsonify({"error": "CSV file not created"}), 500
         
+        # FIXED: UTF-8 encoding
         csv_content = csv_path.read_text(encoding='utf-8', errors='ignore')
         csv_size = csv_path.stat().st_size
         
@@ -409,15 +249,7 @@ def agent_pull():
 
 @app.route("/agent/config", methods=["POST"])
 def agent_config():
-    """
-    Upload robot configuration to the agent
-    
-    Expects JSON:
-        {
-            "config": { ... },
-            "com_port": "COM3"
-        }
-    """
+    """Upload robot configuration"""
     logger.info("Config upload request received")
     
     try:
@@ -427,9 +259,9 @@ def agent_config():
         
         config_data = data["config"]
         
-        # Save config locally for reference
+        # FIXED: UTF-8 encoding
         config_path = AGENT_DATA_DIR / "robot_config.json"
-        with open(config_path, 'w') as f:
+        with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config_data, f, indent=4)
             
         logger.info(f"Config saved locally to {config_path}")
@@ -445,37 +277,27 @@ def agent_config():
 
 @app.route("/agent/upload", methods=["POST"])
 def agent_upload():
-    """
-    Upload replay script to robot AND EXECUTE IT
-    
-    Expects JSON:
-        {
-            "script": "import runloop\n...",
-            "com_port": "COM3",
-            "auto_run": true
-        }
-    """
+    """Upload replay script"""
     logger.info("Upload script request received")
     
     try:
         data = request.get_json()
-        
-        # FIX: Check for both "script" and "script_content" field names
         script_content = data.get("script") or data.get("script_content")
         
         if not data or not script_content:
-            logger.error("Script content not provided in request")
+            logger.error("Script content not provided")
             return jsonify({"error": "script required"}), 400
         
         selected_port = data.get("com_port", COM_PORT)
-        auto_run = data.get("auto_run", False)  # FIX: Don't auto-run, only run when user clicks Run button
+        auto_run = data.get("auto_run", False)
         
+        # FIXED: UTF-8 encoding
         script_path = AGENT_DATA_DIR / "replay.py"
-        script_path.write_text(script_content)
+        script_path.write_text(script_content, encoding='utf-8')
         logger.info("Saved replay script")
         
         logger.info(f"Uploading to {selected_port}...")
-        cmd = ["mpremote", "connect", selected_port, "cp", str(script_path.absolute()), ":replay.py"]
+        cmd = [sys.executable, "-m", "mpremote", "connect", selected_port, "cp", str(script_path.absolute()), ":replay.py"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         
         if result.returncode != 0:
@@ -485,13 +307,9 @@ def agent_upload():
         
         logger.info("Script uploaded")
         
-        # FIX: IMMEDIATELY execute after upload (no remote call needed!)
         if auto_run:
-            logger.info(f"Auto-executing script on {selected_port}...")
-            exec_cmd = [
-                "mpremote", "connect", selected_port,
-                "exec", "exec(open('replay.py').read())"
-            ]
+            logger.info(f"Auto-executing on {selected_port}...")
+            exec_cmd = [sys.executable, "-m", "mpremote", "connect", selected_port, "exec", "exec(open('replay.py').read())"]
             
             try:
                 exec_result = subprocess.run(exec_cmd, capture_output=True, text=True, timeout=600)
@@ -519,11 +337,10 @@ def agent_upload():
                 logger.error("Script execution timed out")
                 return jsonify({
                     "status": "success",
-                    "message": "Script uploaded and execution started (may still be running)",
+                    "message": "Script uploaded and execution started",
                     "executed": True
                 })
         else:
-            # Just upload, don't execute
             return jsonify({
                 "status": "success",
                 "message": "Script uploaded to robot",
@@ -536,34 +353,20 @@ def agent_upload():
 
 @app.route("/agent/run", methods=["POST"])
 def agent_run():
-    """
-    Execute the generated replay script on the robot
-    
-    Expects JSON:
-        {"com_port": "COM3"}
-    
-    The script should have been uploaded as replay.py
-    """
+    """Execute replay script on robot"""
     try:
         data = request.get_json()
         selected_port = data.get("com_port", COM_PORT)
         
         logger.info(f"Run request received for port {selected_port}")
-        
-        # Execute the replay.py that was uploaded via /agent/upload
         logger.info("Executing replay script on robot...")
         
-        cmd = [
-            "mpremote", "connect", selected_port,
-            "exec", "exec(open('replay.py').read())"
-        ]
+        cmd = [sys.executable, "-m", "mpremote", "connect", selected_port, "exec", "exec(open('replay.py').read())"]
         
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             
             logger.info(f"Command return code: {result.returncode}")
-            logger.info(f"STDOUT: {result.stdout}")
-            logger.info(f"STDERR: {result.stderr}")
             
             if result.returncode != 0:
                 error_msg = result.stderr if result.stderr else (result.stdout if result.stdout else "Unknown error")

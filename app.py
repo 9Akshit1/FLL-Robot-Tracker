@@ -380,26 +380,35 @@ def convert():
             from backend import convert_to_code
             
             print("[CONVERT] Running convert_to_code.generate_spike_script()...")
-            output_path = convert_to_code.generate_spike_script(
+            
+            # Define paths for timeline (upload) and display (UI preview) scripts
+            timeline_script_path = GENERATED_SCRIPT_PATH  # This gets uploaded to robot
+            display_script_path = GENERATED_SCRIPT_PATH.parent / "generated_spike_display.py"  # For UI
+            
+            # Call conversion function - returns both scripts
+            timeline_script, display_script = convert_to_code.generate_spike_script(
                 str(LOCAL_CSV_PATH), 
-                str(GENERATED_SCRIPT_PATH),
+                str(timeline_script_path),
+                str(display_script_path),
                 config=current_config
             )
 
             if GENERATED_SCRIPT_PATH.exists():
-                size = GENERATED_SCRIPT_PATH.stat().st_size
-                script_content = GENERATED_SCRIPT_PATH.read_text()
-                print(f"[CONVERT] Script generated ({size} bytes)")
+                timeline_size = GENERATED_SCRIPT_PATH.stat().st_size
+                display_size = len(display_script)
+                print(f"[CONVERT] Timeline script generated ({timeline_size} bytes)")
+                print(f"[CONVERT] Display script generated ({display_size} bytes)")
 
                 return jsonify({
                     "status": "Success",
-                    "script_size": size,
-                    "message": f"Generated ({size} bytes)",
-                    "output": f"OK: Script generated\nOK: Size: {size} bytes",
-                    "script_content": script_content
+                    "timeline_size": timeline_size,
+                    "display_size": display_size,
+                    "message": f"Generated (Timeline: {timeline_size} bytes, Display: {display_size} bytes)",
+                    "output": f"OK: Script generated\nOK: Timeline size: {timeline_size} bytes\nOK: Ready to upload",
+                    "script_content": display_script  # SHOW DISPLAY VERSION IN UI
                 })
             else:
-                print("[CONVERT] Script creation failed - file doesn't exist")
+                print("[CONVERT] Timeline script creation failed - file doesn't exist")
                 return jsonify({
                     "status": "Error",
                     "message": "Failed to generate script",
@@ -560,17 +569,33 @@ def run_script():
 
 @app.route("/download")
 def download():
-    """Download script"""
+    """
+    Download the DISPLAY script (semantic version for reference)
+    NOTE: The actual TIMELINE script is what gets uploaded to the robot
+    """
     try:
-        if not GENERATED_SCRIPT_PATH.exists():
-            return jsonify({"status": "Error", "message": "No script"}), 400
+        display_script_path = GENERATED_SCRIPT_PATH.parent / "generated_spike_display.py"
+        
+        # If display script exists, download that (prettier, easier to read)
+        if display_script_path.exists():
+            print("[DOWNLOAD] Serving DISPLAY script (semantic version)...")
+            return send_file(
+                display_script_path,
+                as_attachment=True,
+                download_name="replay_semantic.py"
+            )
+        
+        # Fallback to timeline if display doesn't exist
+        if GENERATED_SCRIPT_PATH.exists():
+            print("[DOWNLOAD] Display script not found, serving TIMELINE script...")
+            return send_file(
+                GENERATED_SCRIPT_PATH,
+                as_attachment=True,
+                download_name="replay_timeline.py"
+            )
+        
+        return jsonify({"status": "Error", "message": "No script generated"}), 400
 
-        print("[DOWNLOAD] Serving script download...")
-        return send_file(
-            GENERATED_SCRIPT_PATH,
-            as_attachment=True,
-            download_name="replay.py"
-        )
     except Exception as e:
         return jsonify({"status": "Error", "message": str(e)}), 500
 
