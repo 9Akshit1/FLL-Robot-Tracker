@@ -13,7 +13,9 @@ import json
 import math
 
 class DataPoint:
-    """Single data sample from robot sensors"""
+    """
+    Single data sample from robot sensors
+    """
     def __init__(self, data_dict):
         self.t = float(data_dict.get("time_ms", 0))
         
