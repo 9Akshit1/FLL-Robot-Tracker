@@ -1,4 +1,4 @@
-# collect_data_2_0.py - FLL Robot Data Logger v2.0
+# collect_data_2_0.py - FLL Robot Data Logger 2.0
 
 import motor
 import force_sensor
@@ -15,10 +15,7 @@ PORT_MAP = {
     "D": port.D, "E": port.E, "F": port.F,
 }
 
-# ============================================================
-# CONFIG LOADING
-# ============================================================
-
+# config loading
 def load_config():
     """Load robot config from hub - simplified JSON parsing"""
     try:
@@ -71,10 +68,7 @@ def load_config():
             "sensors": {"distance": "D"}
         }
 
-# ============================================================
-# DYNAMIC HEADER GENERATION
-# ============================================================
-
+# Header Generation
 def generate_header(config):
     """Generate CSV header based on config"""
     fields = ["time_ms"]
@@ -99,10 +93,7 @@ def generate_header(config):
     
     return ",".join(fields)
 
-# ============================================================
-# DATA COLLECTION
-# ============================================================
-
+# Data Collection
 recording = False
 header_sent = False
 config = load_config()
@@ -209,7 +200,7 @@ async def collect_data():
                     except:
                         pass
 
-                # IMU
+                # IMU (gyro data collection)
                 try:
                     yaw, pitch, roll = motion_sensor.tilt_angles()
                     data_line += f",{yaw/10},{pitch/10},{roll/10}\n"
@@ -235,10 +226,7 @@ async def collect_data():
             pass
         time.sleep_ms(500)
 
-# ============================================================
-# MAIN
-# ============================================================
-
+# Main
 light_matrix.write("RDY")
 print("FLL Robot Logger v2.0")
 print(f"Motors: {list(config['motors'].keys())}")
