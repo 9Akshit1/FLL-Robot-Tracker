@@ -1,12 +1,5 @@
 # ============================================================
 # convert_to_code.py
-# Converts recorded CSV data into two SPIKE Prime replay scripts:
-#
-# 1. TIMELINE script  - frame-by-frame exact replay of every motor movement,
-#    preserving the exact degrees and timing from the recording.
-#
-# 2. DISPLAY script   - semantic replay built from movement_analysis segments,
-#    each segment runs its motors at the correct speed for its full duration.
 # ============================================================
 
 import json
