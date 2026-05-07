@@ -1,3 +1,13 @@
+"""
+An auto-generated file that replays the original recorded movements
+
+Apr 15, 2026
+ICS4U
+
+Note: This program is no longer in use. It is only here as proof for the code components of pride.
+
+"""
+
 import runloop
 import motor
 from hub import port
