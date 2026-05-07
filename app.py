@@ -1,4 +1,6 @@
-# app.py - FINAL VERSION with all fixes
+# app.py - FINAL FIXED VERSION
+# - analyze route accepts BOTH GET and POST
+# - Better error handling for all steps
 
 from flask import Flask, jsonify, send_file, render_template, request
 from pathlib import Path
@@ -10,6 +12,7 @@ import shutil
 import csv as csvmodule
 import os
 import requests
+import traceback
 
 from config import SERIAL_PORT, DATA_DIR, LOCAL_CSV_PATH, SEGMENTS_PATH, GENERATED_SCRIPT_PATH, ROBOT_CONFIG
 
@@ -34,18 +37,7 @@ AGENT_URL = os.getenv("AGENT_URL", "http://localhost:5001")
 # ============================================================
 
 def call_agent(endpoint, method="GET", data=None, timeout=30):
-    """
-    Call the local agent running on user's computer
-
-    Args:
-        endpoint: Agent endpoint (e.g., "/agent/connect")
-        method: GET or POST
-        data: JSON data to send (for POST)
-        timeout: Request timeout in seconds
-
-    Returns:
-        dict: Response JSON or error dict
-    """
+    """Call the local agent running on user's computer"""
     try:
         url = f"{AGENT_URL}{endpoint}"
         print(f"[AGENT] Calling: {method} {url} (timeout: {timeout}s)")
@@ -61,20 +53,17 @@ def call_agent(endpoint, method="GET", data=None, timeout=30):
 
     except requests.exceptions.Timeout as e:
         print(f"[AGENT] TIMEOUT: {endpoint} (waited {timeout}s)")
-        import traceback
         traceback.print_exc()
         return {"error": f"Agent timeout after {timeout}s - is local_agent.py running?"}
 
     except requests.exceptions.ConnectionError as e:
         print(f"[AGENT] CONNECTION FAILED: {AGENT_URL}")
         print(f"[AGENT] Error details: {e}")
-        import traceback
         traceback.print_exc()
         return {"error": f"Cannot reach agent at {AGENT_URL}. Is local_agent.py running?"}
 
     except Exception as e:
         print(f"[AGENT] EXCEPTION: {type(e).__name__}: {e}")
-        import traceback
         traceback.print_exc()
         return {"error": str(e)}
 
@@ -84,9 +73,7 @@ def call_agent(endpoint, method="GET", data=None, timeout=30):
 
 @app.route("/detect_ports")
 def detect_ports():
-    """
-    Detect available serial ports via local agent
-    """
+    """Detect available serial ports via local agent"""
     try:
         print("[PORTS] Requesting port detection from agent...")
 
@@ -178,25 +165,10 @@ def index():
 
 @app.route("/connect")
 def connect():
-    """
-    Get connection script and port for local agent
-    """
+    """Get connection script and port for local agent"""
     try:
         print(f"[CONNECT] Current working directory: {os.getcwd()}")
         print(f"[CONNECT] Looking for script at: {COLLECT_DATA_SCRIPT}")
-        print(f"[CONNECT] Absolute path: {COLLECT_DATA_SCRIPT.absolute()}")
-
-        try:
-            contents = list(Path(".").iterdir())
-            print(f"[CONNECT] Current directory contents: {[str(p) for p in contents]}")
-        except Exception as e:
-            print(f"[CONNECT] Error listing directory: {e}")
-
-        backend_path = Path("backend")
-        if backend_path.exists():
-            print(f"[CONNECT] Backend exists, contents: {list(backend_path.iterdir())}")
-        else:
-            print("[CONNECT] Backend directory not found")
 
         if not COLLECT_DATA_SCRIPT.exists():
             print(f"[CONNECT] Script not found: {COLLECT_DATA_SCRIPT}")
@@ -241,116 +213,141 @@ def save_csv():
         csv_content = data.get("csv_content", "")
 
         LOCAL_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-        LOCAL_CSV_PATH.write_text(csv_content)
 
-        print(f"[CSV] Saved CSV ({len(csv_content)} bytes)")
+        with open(LOCAL_CSV_PATH, "w", encoding="utf-8") as f:
+            f.write(csv_content)
 
-        return jsonify({"status": "Success", "message": "CSV saved"})
+        size = LOCAL_CSV_PATH.stat().st_size
+        print(f"[CSV] Saved CSV ({size} bytes)")
+
+        return jsonify({
+            "status": "Success",
+            "message": "CSV saved",
+            "output": f"OK: CSV saved ({size} bytes)"
+        })
 
     except Exception as e:
         print(f"[CSV] Exception: {e}")
-        return jsonify({"status": "Error", "message": str(e)}), 500
+        return jsonify({
+            "status": "Error",
+            "message": str(e),
+            "output": f"Error: {e}"
+        }), 500
 
-@app.route("/analyze", methods=["POST"])
+@app.route("/analyze", methods=["GET", "POST"])
 def analyze():
-    """
-    Analyze movement data using movement_analysis.py
-    """
+    """Run movement analysis on recorded CSV - ACCEPTS BOTH GET AND POST"""
     try:
-        print("[ANALYZE] Starting analysis...")
-
-        # Get config from request body if provided
-        data = request.get_json() or {}
-        config = data.get('config', current_config)
-
-        # Check if CSV exists
         if not LOCAL_CSV_PATH.exists():
-            print("[ANALYZE] CSV file not found")
+            print("[ANALYZE] No CSV file")
             return jsonify({
                 "status": "Error",
                 "message": "No CSV file",
                 "output": "Error: No CSV data. Please pull data first."
             }), 400
 
-        # FIX: Better error handling and logging
         print(f"[ANALYZE] Analyzing {LOCAL_CSV_PATH}")
         print(f"[ANALYZE] CSV file size: {LOCAL_CSV_PATH.stat().st_size} bytes")
         
+        # CRITICAL: Try/except for each major step
         try:
-            # Import the movement analysis module
+            print("[ANALYZE] Step 1: Importing movement_analysis...")
             from backend import movement_analysis
+            print("[ANALYZE] Step 1 OK: Import successful")
             
-            # Run analysis with proper config
-            print("[ANALYZE] Running movement_analysis.run()...")
-            segments, summary = movement_analysis.run(
-                str(LOCAL_CSV_PATH), 
-                config=config
-            )
-            
-            print(f"[ANALYZE] Got {len(segments)} segments")
-            
-            # Ensure segments have the correct format for convert_to_code
-            # Standardize keys: start_ms, end_ms, duration_ms, avg_linear_vel, avg_angular_vel
-            normalized_segments = []
-            for seg in segments:
-                normalized = {
-                    'start_ms': seg.get('start_ms', seg.get('start', 0)),
-                    'end_ms': seg.get('end_ms', seg.get('end', 0)),
-                    'duration_ms': seg.get('duration_ms', seg.get('duration', 0)),
-                    'avg_linear_vel': seg.get('avg_linear_vel', 0),
-                    'avg_angular_vel': seg.get('avg_angular_vel', 0),
-                    'description': seg.get('description', seg.get('type', 'Unknown')),
-                    'actions': seg.get('actions', []),
-                    'type': seg.get('type', '')
-                }
-                normalized_segments.append(normalized)
-            
-            print(f"[ANALYZE] Normalized {len(normalized_segments)} segments")
-            print(f"[ANALYZE] Sample segment: {normalized_segments[0] if normalized_segments else 'none'}")
-            
-            # Save NORMALIZED segments for later use - ALWAYS as JSON
-            segments_json_path = SEGMENTS_PATH.parent / "segments.json"
-            segments_json_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(segments_json_path, 'w') as f:
-                json.dump(normalized_segments, f, indent=2)
-            print(f"[ANALYZE] Saved normalized segments to {segments_json_path}")
-
-            # Build output text
-            output_text = f"Analysis Complete\n"
-            output_text += f"Total time: {summary.get('total_time_ms', 0):.0f}ms\n"
-            output_text += f"Found {len(segments)} movement segments\n\n"
-
-            for i, seg in enumerate(segments, 1):
-                # Handle both possible key names (start_ms or start)
-                start = seg.get('start_ms') if seg.get('start_ms') is not None else seg.get('start', 0)
-                end = seg.get('end_ms') if seg.get('end_ms') is not None else seg.get('end', 0)
-                duration = seg.get('duration_ms') if seg.get('duration_ms') is not None else seg.get('duration', 0)
-                desc = seg.get('description', 'Unknown')
-
-                output_text += f"[{i}] {desc}: {start:.0f}ms - {end:.0f}ms ({duration:.0f}ms)\n"
-
-            print("[ANALYZE] Analysis complete")
-            return jsonify({
-                "status": "Success",
-                "message": "Analysis complete",
-                "segments": segments,
-                "summary": summary,
-                "output": output_text
-            })
-
         except ImportError as e:
-            print(f"[ANALYZE] Import error: {e}")
-            import traceback
+            print(f"[ANALYZE] IMPORT FAILED: {e}")
             traceback.print_exc()
             return jsonify({
                 "status": "Error",
                 "message": f"Cannot import movement_analysis: {e}",
+                "output": f"Error: Cannot import module: {e}"
+            }), 500
+        
+        try:
+            print("[ANALYZE] Step 2: Running movement_analysis.run()...")
+            success = movement_analysis.run(str(LOCAL_CSV_PATH), str(SEGMENTS_PATH))
+            print(f"[ANALYZE] Step 2 OK: Analysis returned {success}")
+            
+            if not success:
+                print("[ANALYZE] Analysis returned False")
+                return jsonify({
+                    "status": "Error",
+                    "message": "Analysis failed",
+                    "output": "Error: Movement analysis returned False"
+                }), 500
+            
+        except Exception as e:
+            print(f"[ANALYZE] ANALYSIS FAILED: {e}")
+            traceback.print_exc()
+            return jsonify({
+                "status": "Error",
+                "message": f"Analysis execution failed: {e}",
+                "output": f"Error during analysis: {e}"
+            }), 500
+        
+        try:
+            print("[ANALYZE] Step 3: Reading segments.json...")
+            with open(SEGMENTS_PATH, 'r') as f:
+                segments = json.load(f)
+            print(f"[ANALYZE] Step 3 OK: Loaded {len(segments)} segments")
+            
+        except FileNotFoundError:
+            print(f"[ANALYZE] segments.json not found at {SEGMENTS_PATH}")
+            traceback.print_exc()
+            return jsonify({
+                "status": "Error",
+                "message": f"segments.json not created",
+                "output": f"Error: {SEGMENTS_PATH} not found"
+            }), 500
+        
+        except json.JSONDecodeError as e:
+            print(f"[ANALYZE] segments.json is not valid JSON: {e}")
+            traceback.print_exc()
+            return jsonify({
+                "status": "Error",
+                "message": f"segments.json is invalid: {e}",
+                "output": f"Error: Invalid JSON in segments.json"
+            }), 500
+        
+        except Exception as e:
+            print(f"[ANALYZE] Failed to read segments: {e}")
+            traceback.print_exc()
+            return jsonify({
+                "status": "Error",
+                "message": f"Failed to read segments: {e}",
                 "output": f"Error: {e}"
             }), 500
+        
+        # Build output text
+        output_text = f"Analysis Complete\n"
+        
+        # Calculate total time from segments
+        if segments:
+            total_time_ms = max(seg.get('end_ms', 0) for seg in segments)
+            output_text += f"Total time: {total_time_ms:.0f}ms\n"
+        
+        output_text += f"Found {len(segments)} movement segments\n\n"
+
+        for i, seg in enumerate(segments, 1):
+            start = seg.get('start_ms', 0)
+            end = seg.get('end_ms', 0)
+            duration = seg.get('duration_ms', 0)
+            desc = seg.get('description', 'Unknown')
+
+            output_text += f"[{i}] {desc}: {start:.0f}ms - {end:.0f}ms ({duration:.0f}ms)\n"
+
+        print("[ANALYZE] Analysis complete - returning success")
+        return jsonify({
+            "status": "Success",
+            "message": "Analysis complete",
+            "segments": segments,
+            "summary": {},
+            "output": output_text
+        })
 
     except Exception as e:
-        print(f"[ANALYZE] Exception: {e}")
-        import traceback
+        print(f"[ANALYZE] OUTER EXCEPTION: {e}")
         traceback.print_exc()
         return jsonify({
             "status": "Error",
@@ -358,12 +355,9 @@ def analyze():
             "output": f"Error: {e}"
         }), 500
 
-@app.route("/convert", methods=["POST", "GET"])
+@app.route("/convert")
 def convert():
-    """
-    Convert analyzed data to replay script
-    Accepts both GET and POST for flexibility
-    """
+    """Convert analyzed data to replay script"""
     try:
         print("[CONVERT] Starting conversion...")
 
@@ -395,7 +389,7 @@ def convert():
 
             if GENERATED_SCRIPT_PATH.exists():
                 timeline_size = GENERATED_SCRIPT_PATH.stat().st_size
-                display_size = len(display_script)
+                display_size = len(display_script) if display_script else 0
                 print(f"[CONVERT] Timeline script generated ({timeline_size} bytes)")
                 print(f"[CONVERT] Display script generated ({display_size} bytes)")
 
@@ -418,7 +412,6 @@ def convert():
                 
         except ImportError as e:
             print(f"[CONVERT] Import error: {e}")
-            import traceback
             traceback.print_exc()
             return jsonify({
                 "status": "Error",
@@ -427,30 +420,25 @@ def convert():
             }), 500
         except Exception as e:
             print(f"[CONVERT] Error running conversion: {e}")
-            import traceback
             traceback.print_exc()
             return jsonify({
                 "status": "Error",
-                "message": f"Conversion failed: {e}",
+                "message": str(e),
                 "output": f"Error: {e}"
             }), 500
 
     except Exception as e:
         print(f"[CONVERT] Exception: {e}")
-        import traceback
         traceback.print_exc()
         return jsonify({
             "status": "Error",
             "message": str(e),
-            "output": f"Error: {e}",
-            "script_content": ""
+            "output": f"Error: {e}"
         }), 500
 
-@app.route("/upload_script")
-def upload_script():
-    """
-    Upload script to robot via local agent
-    """
+@app.route("/upload", methods=["POST", "GET"])
+def upload():
+    """Upload script to robot via local agent"""
     try:
         print("[UPLOAD] Starting script upload via agent...")
 
@@ -474,7 +462,6 @@ def upload_script():
 
         script_content = GENERATED_SCRIPT_PATH.read_text()
 
-        # FIX: Use "script" field name (not "script_content")
         result = call_agent(
             "/agent/upload",
             method="POST",
@@ -509,10 +496,7 @@ def upload_script():
 
 @app.route("/run_script", methods=["POST", "GET"])
 def run_script():
-    """
-    Execute replay script on robot via local agent
-    Allows multiple runs - does NOT disable button
-    """
+    """Execute replay script on robot via local agent"""
     try:
         print("[RUN] Starting script execution via agent...")
 
@@ -552,7 +536,6 @@ def run_script():
         output = result.get("output", "Script executed")
         print("[RUN] Script execution completed")
 
-        # IMPORTANT: Return success - button stays enabled for next run
         return jsonify({
             "status": "Success",
             "message": "Script executed",
@@ -569,23 +552,18 @@ def run_script():
 
 @app.route("/download")
 def download():
-    """
-    Download the DISPLAY script (semantic version for reference)
-    NOTE: The actual TIMELINE script is what gets uploaded to the robot
-    """
+    """Download the DISPLAY script"""
     try:
         display_script_path = GENERATED_SCRIPT_PATH.parent / "generated_spike_display.py"
         
-        # If display script exists, download that (prettier, easier to read)
         if display_script_path.exists():
-            print("[DOWNLOAD] Serving DISPLAY script (semantic version)...")
+            print("[DOWNLOAD] Serving DISPLAY script...")
             return send_file(
                 display_script_path,
                 as_attachment=True,
                 download_name="replay_semantic.py"
             )
         
-        # Fallback to timeline if display doesn't exist
         if GENERATED_SCRIPT_PATH.exists():
             print("[DOWNLOAD] Display script not found, serving TIMELINE script...")
             return send_file(
@@ -676,7 +654,6 @@ def not_found(error):
 def internal_error(error):
     """Handle 500 errors"""
     print(f"[ERROR] Internal server error: {error}")
-    import traceback
     traceback.print_exc()
     return jsonify({"error": "Internal server error"}), 500
 
