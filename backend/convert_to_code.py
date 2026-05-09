@@ -1,6 +1,10 @@
-# ============================================================
-# convert_to_code.py
-# ============================================================
+"""
+Converts recorded robot CSV motor logs into SPIKE Prime MicroPython replay scripts.
+Generates both an exact frame-by-frame timeline replay and a simplified semantic segment-based replay.
+
+ICS4U
+May 7, 2026
+"""
 
 import json
 import csv
@@ -12,11 +16,17 @@ MOTOR_CALIBRATION = {
     'C': {'multiplier': 2.14, 'min_speed': 10, 'max_speed': 750},
 }
 
-# ============================================================
-# CSV PARSING
-# ============================================================
-
 def parse_motor_columns(csv_headers):
+    """
+    Detects motor relative position columns in a CSV header list and maps them to motor ports.
+    This allows the converter to automatically determine which motors were recorded.
+
+    Args:
+        csv_headers (list[str]): List of CSV column header strings.
+
+    Returns:
+        dict: Dictionary mapping motor ports to detected CSV column keys.
+    """
     motors_found = {}
     for header in csv_headers:
         header_clean = header.replace('\ufeff', '').strip()
@@ -31,9 +41,14 @@ def parse_motor_columns(csv_headers):
 
 def extract_motor_data(csv_path):
     """
-    Load every frame from the CSV.
-    Returns (frames, motor_columns) where each frame has:
-      { time_ms, motors: {port: rel_position}, deltas: {port: delta_from_prev} }
+    Reads all rows from a recorded CSV file and converts them into frame dictionaries with motor deltas.
+    Each frame includes time, motor positions, and change in motor position since the previous frame.
+
+    Args:
+        csv_path (str): Path to the input CSV file.
+
+    Returns:
+        tuple[list[dict], dict]: A list of frame dictionaries and a motor column mapping dictionary.
     """
     frames = []
     motor_columns = None
@@ -93,15 +108,18 @@ def extract_motor_data(csv_path):
         print(f"[CONVERT] ERROR parsing CSV: {e}")
         raise
 
-
-# ============================================================
-# SPEED CALCULATION
-# ============================================================
-
 def calculate_speed(motor_port, delta_degrees, dt_ms):
     """
-    Convert a recorded delta (degrees moved in dt_ms milliseconds) to a
-    SPIKE Prime speed value (20-750).
+    Converts a recorded motor delta into an estimated SPIKE Prime speed value using calibration constants.
+    Output is clamped to valid SPIKE speed ranges for the motor.
+
+    Args:
+        motor_port (str): Motor port letter (A-F).
+        delta_degrees (float): Change in motor position in degrees.
+        dt_ms (int): Time interval between frames in milliseconds.
+
+    Returns:
+        int: Speed value between 0 and 750 for SPIKE motor commands.
     """
     if dt_ms <= 0:
         dt_ms = 30
@@ -114,18 +132,16 @@ def calculate_speed(motor_port, delta_degrees, dt_ms):
     speed = max(calib['min_speed'], min(calib['max_speed'], speed))
     return speed
 
-
-# ============================================================
-# TIMELINE SCRIPT  (frame-by-frame exact replay)
-# ============================================================
-
 def build_timeline(frames):
     """
-    Build a list of timeline entries directly from every consecutive frame pair.
-    Each entry: { delay_ms, motors: { port: [target_degrees, speed] } }
+    Converts frame data into a timeline of replay commands that preserve exact recorded timing.
+    Each timeline entry stores the delay and motor movement commands for that interval.
 
-    No segment filtering -- every recorded frame is replayed so the robot
-    follows the exact path at the exact speed it was recorded at.
+    Args:
+        frames (list[dict]): List of frame dictionaries produced from the CSV.
+
+    Returns:
+        list[dict]: Timeline list containing delay values and motor movement commands.
     """
     timeline = []
 
@@ -159,16 +175,15 @@ def build_timeline(frames):
 
 def generate_timeline_script(timeline, motor_columns):
     """
-    Generate a SPIKE Prime MicroPython script that replays the timeline
-    frame by frame with exact timing.
+    Builds a SPIKE Prime MicroPython script that replays movement using frame-by-frame timeline data.
+    Motor commands are executed in parallel and then delayed to match recorded timing.
 
-    Each frame:
-      1. Fires motor.run_for_degrees for every moving motor simultaneously
-         (non-blocking so motors that overlap in time run in parallel).
-      2. Waits exactly dt_ms before the next frame.
+    Args:
+        timeline (list[dict]): Timeline entries containing delays and motor commands.
+        motor_columns (dict): Mapping of detected motor ports from the CSV header.
 
-    This faithfully reproduces both the degrees moved and the inter-frame
-    timing from the original recording.
+    Returns:
+        str: Complete MicroPython script text for exact replay.
     """
     all_motors = sorted(motor_columns.keys())
     port_lines = "".join(f'    "{p}": port.{p},\n' for p in all_motors)
@@ -220,10 +235,6 @@ runloop.run(main())
     return script
 
 
-# ============================================================
-# DISPLAY SCRIPT  (semantic segment-based replay)
-# ============================================================
-
 # Maps movement_analysis description keywords -> which motors, base speed, direction
 SEMANTIC_MOTOR_MAP = {
     'drive forward':  {'A': (400, -1), 'B': (400, -1)},
@@ -237,9 +248,14 @@ SEMANTIC_MOTOR_MAP = {
 
 def parse_segment_motors(description):
     """
-    Parse a description like 'Drive Forward + Raise Arm' into
-    { port: (speed, direction_sign) } by matching known keywords.
-    Handles combined descriptions (joined with '+').
+    Matches a segment description against known movement keywords to determine motor commands.
+    Multiple actions can be combined in one description string.
+
+    Args:
+        description (str): Segment description text such as "Drive Forward + Raise Arm".
+
+    Returns:
+        dict: Dictionary mapping motor ports to (speed, direction_sign) tuples.
     """
     desc_lower = description.lower()
     combined = {}
@@ -252,9 +268,14 @@ def parse_segment_motors(description):
 
 def degrees_for_duration(speed_val, duration_ms, calib_multiplier=2.14):
     """
-    Estimate degrees a motor will travel at speed_val for duration_ms.
-      deg/sec = speed / multiplier
-      degrees = deg/sec * (duration_ms / 1000)
+    Matches a segment description against known movement keywords to determine motor commands.
+    Multiple actions can be combined in one description string.
+
+    Args:
+        description (str): Segment description text such as "Drive Forward + Raise Arm".
+
+    Returns:
+        dict: Dictionary mapping motor ports to (speed, direction_sign) tuples.
     """
     deg_per_sec = speed_val / calib_multiplier
     return int(deg_per_sec * (duration_ms / 1000.0))
@@ -262,16 +283,15 @@ def degrees_for_duration(speed_val, duration_ms, calib_multiplier=2.14):
 
 def generate_display_script(segments_data, motor_columns):
     """
-    Generate a semantic replay script.
+    Generates a simplified semantic replay script using labeled movement segments.
+    Unknown segments are treated as idle delays to preserve total run time.
 
-    For each non-idle segment:
-      - Parse its description to find which motors move and in which direction
-      - Calculate target degrees = speed * duration so the motor runs at the
-        correct speed for the full segment duration
-      - Emit run_for_degrees calls for all motors simultaneously, then sleep
-        for the segment duration
+    Args:
+        segments_data (list[dict]): List of segment dictionaries containing descriptions and durations.
+        motor_columns (dict): Mapping of detected motor ports from the CSV header.
 
-    Idle segments become plain sleeps so total run time matches the recording.
+    Returns:
+        str: Complete MicroPython script text for semantic replay.
     """
     all_motors = sorted(motor_columns.keys())
     port_lines = "".join(f'    "{p}": port.{p},\n' for p in all_motors)
@@ -356,14 +376,20 @@ runloop.run(main())
 """
     return script
 
-
-# ============================================================
-# MAIN ENTRY POINT
-# ============================================================
-
 def generate_spike_script(csv_path, out_path_timeline, out_path_display, config=None):
-    """Main conversion function -- called by app.py /convert route."""
+    """
+    Converts a recorded CSV into both a timeline replay script and a semantic display replay script.
+    Output scripts are written to the provided output file paths.
 
+    Args:
+        csv_path (str): Path to the recorded CSV file.
+        out_path_timeline (str): Output path for the generated timeline replay script.
+        out_path_display (str): Output path for the generated semantic replay script.
+        config (dict | None): Optional configuration dictionary (currently unused).
+
+    Returns:
+        tuple[str, str]: Generated timeline script text and display script text.
+    """
     csv_path          = Path(csv_path)
     out_path_timeline = Path(out_path_timeline)
     out_path_display  = Path(out_path_display)
