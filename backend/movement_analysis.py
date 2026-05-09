@@ -1,11 +1,9 @@
-#!/usr/bin/env python3
 """
-Movement Analysis - FIXED v2
-- Properly detects simultaneous multi-motor movements
-- FIXED: Ensures all segments have end_ms before processing
-- Classifies Drive + Arm combinations correctly
-- Uses motor velocity tracking, not just summation
-- Handles Turn Left/Right vs Drive Forward/Backward correctly
+Analyzes recorded robot motor CSV data and segments motion into labeled actions such as driving, turning, arm movement, and idle.
+Outputs a segments.json file that can be used for semantic replay and visualization.
+
+ICS4U
+May 7, 2026
 """
 
 import csv
@@ -14,7 +12,16 @@ from pathlib import Path
 from collections import defaultdict
 
 def load_csv_data(csv_path):
-    """Load motor data from CSV"""
+    """
+    Loads motor relative position values from a CSV log into a list of frame dictionaries.
+    Each frame contains a timestamp and motor positions for ports A, B, and C.
+
+    Args:
+        csv_path (str): Path to the CSV log file.
+
+    Returns:
+        list[dict]: List of frames containing time_ms and motor position values.
+    """
     frames = []
     with open(csv_path, 'r', encoding='utf-8', errors='ignore') as f:
         reader = csv.DictReader(f)
@@ -35,7 +42,16 @@ def load_csv_data(csv_path):
     return frames
 
 def calculate_velocities(frames):
-    """Calculate motor velocities (degrees per second)"""
+    """
+    Loads motor relative position values from a CSV log into a list of frame dictionaries.
+    Each frame contains a timestamp and motor positions for ports A, B, and C.
+
+    Args:
+        csv_path (str): Path to the CSV log file.
+
+    Returns:
+        list[dict]: List of frames containing time_ms and motor position values.
+    """
     velocities = []
     
     for i in range(1, len(frames)):
@@ -55,7 +71,16 @@ def calculate_velocities(frames):
     return velocities
 
 def segment_movements(frames, velocities, velocity_threshold=2.0):
-    """Segment movements based on velocity changes"""
+    """
+    Loads motor relative position values from a CSV log into a list of frame dictionaries.
+    Each frame contains a timestamp and motor positions for ports A, B, and C.
+
+    Args:
+        csv_path (str): Path to the CSV log file.
+
+    Returns:
+        list[dict]: List of frames containing time_ms and motor position values.
+    """
     segments = []
     current_segment = None
     
@@ -114,12 +139,14 @@ def segment_movements(frames, velocities, velocity_threshold=2.0):
 
 def classify_segment(segment):
     """
-    Properly classify movements
-    Returns combinations like:
-    - "Drive Forward + Raise Arm"
-    - "Turn Left"
-    - "Lower Arm"
-    - "Idle"
+    Loads motor relative position values from a CSV log into a list of frame dictionaries.
+    Each frame contains a timestamp and motor positions for ports A, B, and C.
+
+    Args:
+        csv_path (str): Path to the CSV log file.
+
+    Returns:
+        list[dict]: List of frames containing time_ms and motor position values.
     """
     
     # Get movement data for each motor
@@ -149,8 +176,14 @@ def classify_segment(segment):
 
 def classify_drive(motor_a_vels, motor_b_vels):
     """
-    Classify drive movement
-    Returns: "Drive Forward", "Drive Backward", "Turn Left", "Turn Right", or None
+    Loads motor relative position values from a CSV log into a list of frame dictionaries.
+    Each frame contains a timestamp and motor positions for ports A, B, and C.
+
+    Args:
+        csv_path (str): Path to the CSV log file.
+
+    Returns:
+        list[dict]: List of frames containing time_ms and motor position values.
     """
     
     if not motor_a_vels and not motor_b_vels:
@@ -202,8 +235,14 @@ def classify_drive(motor_a_vels, motor_b_vels):
 
 def classify_arm(motor_c_vels):
     """
-    Classify arm movement
-    Returns: "Raise Arm", "Lower Arm", or None
+    Loads motor relative position values from a CSV log into a list of frame dictionaries.
+    Each frame contains a timestamp and motor positions for ports A, B, and C.
+
+    Args:
+        csv_path (str): Path to the CSV log file.
+
+    Returns:
+        list[dict]: List of frames containing time_ms and motor position values.
     """
     
     if not motor_c_vels:
@@ -221,7 +260,16 @@ def classify_arm(motor_c_vels):
         return "Lower Arm"
 
 def merge_consecutive_idle_segments(segments):
-    """Merge consecutive idle segments into single segments"""
+    """
+    Loads motor relative position values from a CSV log into a list of frame dictionaries.
+    Each frame contains a timestamp and motor positions for ports A, B, and C.
+
+    Args:
+        csv_path (str): Path to the CSV log file.
+
+    Returns:
+        list[dict]: List of frames containing time_ms and motor position values.
+    """
     if not segments:
         return segments
     
@@ -247,8 +295,14 @@ def merge_consecutive_idle_segments(segments):
 
 def run(csv_path='backend/data/raw_data.csv', output_path='backend/data/segments.json'):
     """
-    MAIN FUNCTION - Called by dashboard
-    Analyzes CSV and generates segments.json with proper classification
+    Loads motor relative position values from a CSV log into a list of frame dictionaries.
+    Each frame contains a timestamp and motor positions for ports A, B, and C.
+
+    Args:
+        csv_path (str): Path to the CSV log file.
+
+    Returns:
+        list[dict]: List of frames containing time_ms and motor position values.
     """
     csv_file = Path(csv_path)
     
