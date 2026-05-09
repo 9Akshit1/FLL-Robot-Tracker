@@ -1,6 +1,9 @@
-# collect_data_2_0_FIXED.py - FLL Robot Data Logger v2.0 FIXED
-# Uses motor.absolute_position() instead of relative_position()
-# This fixes the position drift issue
+"""
+Logs motor positions, sensor readings, and IMU tilt angles to a CSV file on the SPIKE hub.
+
+ICS4U
+May 7, 2026
+"""
 
 import motor
 import force_sensor
@@ -17,12 +20,17 @@ PORT_MAP = {
     "D": port.D, "E": port.E, "F": port.F,
 }
 
-# ============================================================
-# CONFIG LOADING
-# ============================================================
-
 def load_config():
-    """Load robot config from hub - simplified JSON parsing"""
+    """
+    Loads robot motor and sensor configuration from a JSON file stored on the hub.
+    If loading fails, a default configuration is returned.
+
+    Args:
+        None
+
+    Returns:
+        dict: Configuration dictionary containing motor and sensor port mappings.
+    """
     try:
         with open("/flash/robot_config.json", "r") as f:
             content = f.read()
@@ -73,12 +81,17 @@ def load_config():
             "sensors": {"distance": "D"}
         }
 
-# ============================================================
-# DYNAMIC HEADER GENERATION
-# ============================================================
-
 def generate_header(config):
-    """Generate CSV header based on config"""
+    """
+    Generates a CSV header string based on the motors and sensors enabled in the config.
+    The header includes absolute motor positions, calculated relative positions, sensors, and IMU angles.
+
+    Args:
+        config (dict): Configuration dictionary containing motor and sensor mappings.
+
+    Returns:
+        str: A comma-separated CSV header line.
+    """
     fields = ["time_ms"]
 
     # Motors - FIXED: Use absolute position for reliability
@@ -101,21 +114,38 @@ def generate_header(config):
 
     return ",".join(fields)
 
-# ============================================================
-# DATA COLLECTION
-# ============================================================
-
 recording = False
 header_sent = False
 config = load_config()
 
 def safe_read(func, default=0):
+    """
+    Calls a sensor/motor function safely and returns a default value if it fails.
+    This prevents logging from crashing due to disconnected hardware.
+
+    Args:
+        func (callable): Function to execute (usually a motor or sensor read).
+        default (any): Value returned if the function raises an exception.
+
+    Returns:
+        any: The function result if successful, otherwise the default value.
+    """
     try:
         return func()
     except:
         return default
 
 async def listen_for_buttons():
+    """
+    Monitors hub buttons to start and stop recording mode.
+    LEFT starts recording and RIGHT stops recording.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
     global recording, header_sent
     while True:
         if button.pressed(button.LEFT) > 0 and not recording:
@@ -132,6 +162,16 @@ async def listen_for_buttons():
         await runloop.sleep_ms(50)
 
 async def collect_data():
+    """
+    Collects motor, sensor, and IMU data while recording is enabled and writes it to a CSV file.
+    Motor relative position is calculated using the initial absolute motor position as the baseline.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
     global recording, header_sent
     f = None
     start_time = time.ticks_ms()
@@ -251,10 +291,8 @@ async def collect_data():
             pass
         time.sleep_ms(500)
 
-# ============================================================
-# MAIN
-# ============================================================
 
+# main
 light_matrix.write("RDY")
 print("FLL Robot Logger v2.0 FIXED")
 print("Using absolute_position() for accurate tracking")
