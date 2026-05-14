@@ -50,6 +50,10 @@ const DEVICE_TYPES = [
 
 // Agent Status Check (Simplified)
 
+/*
+Checks if the local agent server is running and updates UI status accordingly.
+- @returns {Promise<boolean>} True if agent is online, false otherwise
+*/
 async function checkAgentStatus() {
     try {
         console.log("[AGENT] Checking status at", AGENT_URL);
@@ -76,6 +80,10 @@ async function checkAgentStatus() {
     }
 }
 
+/**
+Displays agent as online in UI, enables port controls.
+- @returns {void}
+*/
 function showAgentOnline() {
     console.log("[UI] Showing agent ONLINE");
     if (setupBanner) setupBanner.classList.remove("show");
@@ -88,6 +96,10 @@ function showAgentOnline() {
     if (detectPortsBtn) detectPortsBtn.disabled = false;
 }
 
+/*
+Displays agent as offline in UI, disables port controls.
+ - @returns {void}
+*/
 function showAgentOffline() {
     console.log("[UI] Showing agent OFFLINE");
     if (setupBanner) setupBanner.classList.add("show");
@@ -103,6 +115,10 @@ function showAgentOffline() {
 
 // Initialization
 
+/*
+Initializes dashboard: generates UI, loads preferences, checks agent status.
+- @returns {void}
+*/
 function init() {
     console.log("[INIT] Starting initialization");
 
@@ -126,12 +142,19 @@ function init() {
 }
 
 // Local Storage
-
+/*
+Saves current robot configuration to browser localStorage.
+- @returns {void}
+*/
 function saveToLocalStorage() {
     const config = buildConfigObject();
     localStorage.setItem("fll_robot_config", JSON.stringify(config));
 }
 
+/*
+Loads saved robot configuration from localStorage into UI.
+- @returns {void}
+*/
 function loadSavedPreferences() {
     const saved = localStorage.getItem("fll_robot_config");
     if (!saved) return;
@@ -173,7 +196,10 @@ function loadSavedPreferences() {
 }
 
 // Config UI
-
+/*
+Dynamically generates robot port configuration dropdown UI.
+- @returns {void}
+*/
 function generateConfigUI() {
     configGrid.innerHTML = "";
 
@@ -197,7 +223,10 @@ function generateConfigUI() {
 }
 
 // Port Detection
-
+/*
+Detects available COM ports via local agent API and populates dropdown.
+- @returns {Promise<void>}
+*/
 async function detectPorts() {
     console.log("[PORTS] Detect ports clicked");
 
@@ -251,7 +280,10 @@ if (detectPortsBtn) {
 }
 
 // Build Config Object
-
+/*
+Builds complete robot configuration object from current UI state.
+- @returns {Object} Config with com_port, motors, and sensors
+*/
 function buildConfigObject() {
     const config = {
         com_port: comPort ? comPort.value : "",
@@ -323,7 +355,11 @@ if (saveConfigBtn) {
 }
 
 // Terminal Functions
-
+/*
+Adds formatted text message to terminal output with auto-scroll.
+- @param {string} text - Message to display
+- @returns {void}
+*/
 function addTerminal(text) {
     terminalOutput.push(text);
     if (terminal) {
@@ -332,6 +368,11 @@ function addTerminal(text) {
     }
 }
 
+/*
+Escapes HTML characters in text for safe display.
+- @param {string} text - Input text
+- @returns {string} HTML-escaped text
+*/
 function escapeHtml(text) {
     const map = {
         '&': '&amp;',
