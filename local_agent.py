@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-FLL ROBOT TRACKER - LOCAL AGENT (ver 2.2)
-Single-file bootstrap that handles everything automatically.
-
-Download this file and run it. That's it!
-  python local_agent.py
-
-No manual setup needed.
+Title: local_agent.py
+Course: ICS4U-02
+Author: Akshit Erukulla & Rick He
+Summary: Single-file bootstrap that handles everything automatically.
+- Just download this file and run it. No manual setup needed.
 """
 
 import os
