@@ -1,6 +1,12 @@
-# app.py - FINAL FIXED VERSION
-# - analyze route accepts BOTH GET and POST
-# - Better error handling for all steps
+"""
+Title: app.py
+Course: ICS4U-02
+Author: Akshit Erukulla & Rick He
+Summary:
+Flask web server for the FLL Robot Tracker UI. Provides endpoints for configuring
+the robot, pulling CSV data, analyzing movements, converting results to a replay
+script, and uploading/running the script via a local agent.
+"""
 
 from flask import Flask, jsonify, send_file, render_template, request
 from pathlib import Path
@@ -16,10 +22,7 @@ import traceback
 
 from config import SERIAL_PORT, DATA_DIR, LOCAL_CSV_PATH, SEGMENTS_PATH, GENERATED_SCRIPT_PATH, ROBOT_CONFIG
 
-# ============================================================
-# FLASK SETUP
-# ============================================================
-
+# Flask Setup
 app = Flask(__name__,
     template_folder="frontend/templates",
     static_folder="frontend/static"
@@ -32,12 +35,20 @@ COLLECT_DATA_SCRIPT = BASE_DIR / "backend" / "collect_data_2_0.py"
 # Local Agent Configuration
 AGENT_URL = os.getenv("AGENT_URL", "http://localhost:5001")
 
-# ============================================================
-# LOCAL AGENT HELPER
-# ============================================================
-
+# Local Agent Helper
 def call_agent(endpoint, method="GET", data=None, timeout=30):
-    """Call the local agent running on user's computer"""
+    """
+    Call the local agent server to perform hardware-dependent actions.
+
+    Args:
+        endpoint (str): Agent endpoint path (example: "/agent/status").
+        method (str): HTTP method to use ("GET" or "POST").
+        data (dict | None): JSON payload for POST requests.
+        timeout (int): Request timeout in seconds.
+
+    Returns:
+        dict: JSON response from the agent, or {"error": "..."} if the call fails.
+    """
     try:
         url = f"{AGENT_URL}{endpoint}"
         print(f"[AGENT] Calling: {method} {url} (timeout: {timeout}s)")
@@ -67,13 +78,18 @@ def call_agent(endpoint, method="GET", data=None, timeout=30):
         traceback.print_exc()
         return {"error": str(e)}
 
-# ============================================================
-# PORT DETECTION (via Local Agent)
-# ============================================================
-
+# Port Detection via Local Agent
 @app.route("/detect_ports")
 def detect_ports():
-    """Detect available serial ports via local agent"""
+    """
+    Detect available serial ports by querying the local agent.
+
+    Args:
+        None
+    
+    Returns:
+        flask.Response: JSON response containing detected ports and status code.
+    """
     try:
         print("[PORTS] Requesting port detection from agent...")
 
@@ -113,13 +129,21 @@ def detect_ports():
             "ports": []
         }), 500
 
-# ============================================================
-# CONFIG ROUTES
-# ============================================================
-
+# Config Routes
 @app.route("/config", methods=["GET", "POST"])
 def config_route():
-    """Get or set robot configuration"""
+    """
+    Get or update the current robot configuration.
+
+    POST saves the configuration into robot_config.json and updates the in-memory config.
+    GET returns the current configuration.
+
+    Args:
+        None
+
+    Returns:
+        flask.Response: JSON response containing config status and data.
+    """
     global current_config
 
     if request.method == "POST":
@@ -154,18 +178,34 @@ def config_route():
     # GET
     return jsonify({"status": "Success", "config": current_config})
 
-# ============================================================
-# MAIN ROUTES (via Local Agent)
-# ============================================================
-
+# Main Routes via Local Agent
 @app.route("/")
 def index():
-    """Serve UI"""
+    """
+    Serve the main web dashboard UI.
+
+    Args:
+        None
+
+    Returns:
+        flask.Response: Rendered HTML template for the dashboard.
+    """
     return render_template("dashboard.html")
 
 @app.route("/connect")
 def connect():
-    """Get connection script and port for local agent"""
+    """
+    Return the data collection script and selected COM port to the frontend.
+
+    This allows the frontend/local agent to run the collection script using the
+    currently selected port from configuration.
+
+    Args:
+        None
+
+    Returns:
+        flask.Response: JSON response containing script content and COM port.
+    """
     try:
         print(f"[CONNECT] Current working directory: {os.getcwd()}")
         print(f"[CONNECT] Looking for script at: {COLLECT_DATA_SCRIPT}")
@@ -207,7 +247,15 @@ def connect():
 
 @app.route("/save_csv", methods=["POST"])
 def save_csv():
-    """Save CSV content pulled from agent"""
+    """
+    Save CSV content received from the local agent into the local data directory.
+
+    Args:
+        None (Uses request JSON payload containing "csv_content").
+
+    Returns:
+        flask.Response: JSON response indicating success or failure.
+    """
     try:
         data = request.get_json()
         csv_content = data.get("csv_content", "")
@@ -236,7 +284,15 @@ def save_csv():
 
 @app.route("/analyze", methods=["GET", "POST"])
 def analyze():
-    """Run movement analysis on recorded CSV - ACCEPTS BOTH GET AND POST"""
+    """
+    Run movement analysis on the recorded CSV file and produce segments.json.
+
+    Accepts both GET and POST requests. Loads the generated movement segments
+    and returns them as JSON along with a readable text summary.
+
+    Returns:
+        flask.Response: JSON response containing segments and analysis output.
+    """
     try:
         if not LOCAL_CSV_PATH.exists():
             print("[ANALYZE] No CSV file")
@@ -357,7 +413,18 @@ def analyze():
 
 @app.route("/convert")
 def convert():
-    """Convert analyzed data to replay script"""
+    """
+    Convert the analyzed CSV data into a Spike Prime replay script.
+
+    Uses backend.convert_to_code.generate_spike_script() to generate both a timeline
+    script (for upload) and a display script (for UI preview).
+
+    Args:
+        None
+
+    Returns:
+        flask.Response: JSON response containing generated script info and preview content.
+    """
     try:
         print("[CONVERT] Starting conversion...")
 
@@ -438,7 +505,17 @@ def convert():
 
 @app.route("/upload", methods=["POST", "GET"])
 def upload():
-    """Upload script to robot via local agent"""
+    """
+    Upload the generated replay script to the robot using the local agent.
+
+    Requires that a replay script already exists and that a COM port is selected.
+
+    Args:
+        None
+
+    Returns:
+        flask.Response: JSON response indicating upload success or failure.
+    """
     try:
         print("[UPLOAD] Starting script upload via agent...")
 
@@ -496,7 +573,15 @@ def upload():
 
 @app.route("/run_script", methods=["POST", "GET"])
 def run_script():
-    """Execute replay script on robot via local agent"""
+    """
+    Execute the uploaded replay script on the robot using the local agent.
+
+    Requires a generated script and a selected COM port. Uses a longer timeout
+    since execution may take significant time.
+
+    Returns:
+        flask.Response: JSON response containing execution output and status.
+    """
     try:
         print("[RUN] Starting script execution via agent...")
 
@@ -552,7 +637,15 @@ def run_script():
 
 @app.route("/download")
 def download():
-    """Download the DISPLAY script"""
+    """
+    Download the generated replay script file.
+
+    Prefers the display script (UI-friendly version) if it exists, otherwise falls
+    back to the timeline script.
+
+    Returns:
+        flask.Response: File download response or JSON error message.
+    """
     try:
         display_script_path = GENERATED_SCRIPT_PATH.parent / "generated_spike_display.py"
         
@@ -577,13 +670,19 @@ def download():
     except Exception as e:
         return jsonify({"status": "Error", "message": str(e)}), 500
 
-# ============================================================
-# AGENT STATUS ENDPOINT
-# ============================================================
+# Agent Status Endpoint
 
 @app.route("/agent_status")
 def agent_status():
-    """Check if local agent is reachable"""
+    """
+    Check whether the local agent server is reachable.
+
+    Args:
+        None
+
+    Returns:
+        flask.Response: JSON response indicating whether the agent is connected.
+    """
     result = call_agent("/agent/status")
 
     if "error" in result:
@@ -603,7 +702,15 @@ def agent_status():
 
 @app.route("/get_generated_script")
 def get_generated_script():
-    """Get the generated replay script"""
+    """
+    Return the generated timeline replay script as JSON text.
+
+    Args:
+        None
+
+    Returns:
+        flask.Response: JSON response containing the script content or an error.
+    """
     try:
         if not GENERATED_SCRIPT_PATH.exists():
             return jsonify({"error": "Script not generated"}), 404
@@ -616,7 +723,17 @@ def get_generated_script():
 
 @app.route("/debug_csv_full")
 def debug_csv_full():
-    """Full debug of CSV file"""
+    """
+    Return debugging information about the stored CSV file.
+
+    Provides file metadata, header line, and a preview of the first 10 rows.
+
+    Args:
+        None
+
+    Returns:
+        flask.Response: JSON response containing CSV debug details.
+    """
     try:
         if not LOCAL_CSV_PATH.exists():
             return jsonify({"error": "CSV file does not exist", "path": str(LOCAL_CSV_PATH)})
@@ -641,26 +758,37 @@ def debug_csv_full():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ============================================================
-# ERROR HANDLERS
-# ============================================================
-
+# Error Handling 404
 @app.errorhandler(404)
 def not_found(error):
-    """Handle 404 errors"""
+    """
+    Handle 404 errors for invalid endpoints.
+
+    Args:
+        error (Exception): Flask error object.
+
+    Returns:
+        flask.Response: JSON error response with 404 status code.
+    """
     return jsonify({"error": "Endpoint not found"}), 404
 
+# Error Handling 500
 @app.errorhandler(500)
 def internal_error(error):
-    """Handle 500 errors"""
+    """
+    Handle unexpected internal server errors.
+
+    Args:
+        error (Exception): Flask error object.
+
+    Returns:
+        flask.Response: JSON error response with 500 status code.
+    """
     print(f"[ERROR] Internal server error: {error}")
     traceback.print_exc()
     return jsonify({"error": "Internal server error"}), 500
 
-# ============================================================
-# MAIN
-# ============================================================
-
+# Main
 if __name__ == "__main__":
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Starting FLL Robot Tracker")
