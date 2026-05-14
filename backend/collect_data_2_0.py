@@ -1,8 +1,8 @@
 """
-Logs motor positions, sensor readings, and IMU tilt angles to a CSV file on the SPIKE hub.
-
-ICS4U
-May 7, 2026
+Title: collect_data_2_0.py
+Course: ICS4U-02
+Author: Akshit Erukulla, Rick He
+Summary: Logs motor positions, sensor readings, and IMU tilt angles to a CSV file on the SPIKE hub.
 """
 
 import motor
