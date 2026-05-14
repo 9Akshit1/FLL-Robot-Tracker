@@ -1,9 +1,10 @@
 """
-Converts recorded robot CSV motor logs into SPIKE Prime MicroPython replay scripts.
-Generates both an exact frame-by-frame timeline replay and a simplified semantic segment-based replay.
-
-ICS4U
-May 7, 2026
+Title: convert_to_code.py
+Course: ICS4U-02
+Author: Akshit Erukulla & Rick He
+Summary: 
+- Converts recorded robot CSV motor logs into SPIKE Prime MicroPython replay scripts.
+- Generates both an exact frame-by-frame timeline replay and a simplified semantic segment-based replay.
 """
 
 import json
