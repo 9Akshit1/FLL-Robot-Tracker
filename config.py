@@ -1,5 +1,7 @@
 """"
-
+Title: config.py
+Course: ICS4U-02
+Author: Akshit Erukulla, Rick He
 Summary: 
 This config file sets up core paths, default serial port settings, 
 and a robot configuration (motors and sensors) for the project, 
@@ -8,38 +10,21 @@ It acts as a central place to manage file locations and hardware settings
 that can later be overridden by a user interface.
 """
 
-# ============================================================
-# config.py
-# ============================================================
-
 from pathlib import Path
-
-# ============================================================
-# BASE DIR
-# ============================================================
 
 BASE_DIR = Path(__file__).parent
 
-# ============================================================
-# SERIAL PORT (will be set from UI)
-# ============================================================
-
+# the serial port will be set from UI
 SERIAL_PORT = "COM7"  # Default, will be overridden
 
-# ============================================================
-# PATHS
-# ============================================================
-
+# Paths
 DATA_DIR = BASE_DIR / "backend" / "data"
 LOCAL_CSV_PATH = DATA_DIR / "raw_data.csv"
 SEGMENTS_PATH = DATA_DIR / "segments.csv"
 GENERATED_SCRIPT_PATH = BASE_DIR / "backend" / "data" / "generated_spike.py"
 PRODUCE_DATA_SCRIPT = Path("backend/produce_data.py")
 
-# ============================================================
-# ROBOT CONFIGURATION (Default - will be overridden by UI)
-# ============================================================
-
+# Robot Configuration (Default - will be overridden by UI)
 ROBOT_CONFIG = {
     "com_port": "COM7",
     "motors": {
@@ -54,8 +39,5 @@ ROBOT_CONFIG = {
     }
 }
 
-# ============================================================
 # Ensure data directory exists
-# ============================================================
-
 DATA_DIR.mkdir(parents=True, exist_ok=True)
