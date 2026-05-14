@@ -1,4 +1,12 @@
-// frontend/static/dashboard.js
+/*
+Title: dashboard.js
+Course: ICS4U-02
+Author: Akshit Erukulla & Rick He
+Summary: Frontend dashboard for FLL robot workflow that manages COM port detection, 
+robot hardware configuration, data recording/analysis via local agent API, script generation, 
+and execution with real-time terminal feedback.
+
+*/
 
 const API_BASE = window.location.origin;
 const AGENT_URL = "http://localhost:5001";
@@ -40,9 +48,7 @@ const DEVICE_TYPES = [
     { id: "color_sensor", label: "Color Sensor" }
 ];
 
-// ============================================================
-// AGENT STATUS CHECK (SIMPLIFIED)
-// ============================================================
+// Agent Status Check (Simplified)
 
 async function checkAgentStatus() {
     try {
@@ -95,9 +101,7 @@ function showAgentOffline() {
     if (portStatus) portStatus.textContent = "Local agent not running. See setup banner above.";
 }
 
-// ============================================================
-// INITIALIZATION
-// ============================================================
+// Initialization
 
 function init() {
     console.log("[INIT] Starting initialization");
@@ -121,9 +125,7 @@ function init() {
     addTerminal("System initialized. Checking for local agent...");
 }
 
-// ============================================================
-// LOCAL STORAGE
-// ============================================================
+// Local Storage
 
 function saveToLocalStorage() {
     const config = buildConfigObject();
@@ -170,9 +172,7 @@ function loadSavedPreferences() {
     }
 }
 
-// ============================================================
-// CONFIG UI
-// ============================================================
+// Config UI
 
 function generateConfigUI() {
     configGrid.innerHTML = "";
@@ -196,9 +196,7 @@ function generateConfigUI() {
     });
 }
 
-// ============================================================
-// PORT DETECTION
-// ============================================================
+// Port Detection
 
 async function detectPorts() {
     console.log("[PORTS] Detect ports clicked");
@@ -252,9 +250,7 @@ if (detectPortsBtn) {
     detectPortsBtn.addEventListener("click", detectPorts);
 }
 
-// ============================================================
-// BUILD CONFIG OBJECT
-// ============================================================
+// Build Config Object
 
 function buildConfigObject() {
     const config = {
@@ -283,9 +279,7 @@ function buildConfigObject() {
     return config;
 }
 
-// ============================================================
-// SAVE CONFIG
-// ============================================================
+// Save Config
 
 if (saveConfigBtn) {
     saveConfigBtn.addEventListener("click", async () => {
@@ -328,9 +322,7 @@ if (saveConfigBtn) {
     });
 }
 
-// ============================================================
-// TERMINAL FUNCTIONS
-// ============================================================
+// Terminal Functions
 
 function addTerminal(text) {
     terminalOutput.push(text);
@@ -351,9 +343,7 @@ function escapeHtml(text) {
     return text.replace(/[&<>"']/g, m => map[m]);
 }
 
-// ============================================================
-// WORKFLOW BUTTONS
-// ============================================================
+// Workflow Buttons
 
 if (connectBtn) {
     connectBtn.addEventListener("click", async () => {
@@ -607,8 +597,6 @@ if (downloadBtn) {
     });
 }
 
-// ============================================================
-// RUN INIT
-// ============================================================
 
+// Run Init
 init();
