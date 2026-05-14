@@ -1,3 +1,13 @@
+""""
+
+Summary: 
+This config file sets up core paths, default serial port settings, 
+and a robot configuration (motors and sensors) for the project, 
+while also ensuring the data directory exists. 
+It acts as a central place to manage file locations and hardware settings 
+that can later be overridden by a user interface.
+"""
+
 # ============================================================
 # config.py
 # ============================================================
