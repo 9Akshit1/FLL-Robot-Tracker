@@ -1,9 +1,10 @@
 """
-Analyzes recorded robot motor CSV data and segments motion into labeled actions such as driving, turning, arm movement, and idle.
-Outputs a segments.json file that can be used for semantic replay and visualization.
-
-ICS4U
-May 7, 2026
+Title: movement_analysis.py
+Course: ICS4U-02
+Author: Akshit Erukulla & Rick He
+Summary: 
+- Analyzes recorded robot motor CSV data and segments motion into labeled actions such as driving, turning, arm movement, and idle.
+- Outputs a segments.json file that can be used for semantic replay and visualization.
 """
 
 import csv
